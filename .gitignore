@@ -40,6 +40,9 @@ artifacts/
 # JavaScript dependencies
 node_modules/
 
+# Package builds
+dist/
+
 # Electron
 out/
 release/

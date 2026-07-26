@@ -1,0 +1,4 @@
+packages:
+  - 'packages/*'
+minimumReleaseAgeExclude:
+  - globals@17.8.0
