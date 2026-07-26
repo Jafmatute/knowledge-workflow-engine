@@ -45,6 +45,22 @@ describe('dependency-cruiser configuration', () => {
 
   it.each([
     [
+      'tests/fixtures/architecture/apps/desktop/src/renderer/invalid-workflows-package.ts',
+      'desktop-renderer-cannot-import-privileged-code',
+    ],
+    [
+      'tests/fixtures/architecture/apps/desktop/src/preload/invalid-main-local.ts',
+      'desktop-preload-cannot-import-product-or-renderer-code',
+    ],
+    [
+      'tests/fixtures/architecture/apps/desktop/src/preload/invalid-workflows-package.ts',
+      'desktop-preload-cannot-import-product-or-renderer-code',
+    ],
+    [
+      'tests/fixtures/architecture/apps/desktop/src/main/invalid-workflows-package.ts',
+      'desktop-main-cannot-import-product-code',
+    ],
+    [
       'tests/fixtures/architecture/apps/desktop/src/renderer/invalid-runtime-package.ts',
       'desktop-renderer-cannot-import-unapproved-runtime-package',
     ],
@@ -56,7 +72,7 @@ describe('dependency-cruiser configuration', () => {
       'tests/fixtures/architecture/apps/desktop/src/main/invalid-runtime-package.ts',
       'desktop-main-cannot-import-unapproved-runtime-package',
     ],
-  ])('reports unapproved desktop runtime package %s', (fixture, expectedRule) => {
+  ])('reports forbidden desktop dependency %s', (fixture, expectedRule) => {
     const result = cruise([fixture]);
 
     expect(result.status).not.toBe(0);

@@ -87,7 +87,7 @@ module.exports = {
       severity: 'error',
       from: { path: '(^|/)apps/desktop/src/renderer/', pathNot: '\\.(test|spec)\\.ts$' },
       to: {
-        path: '(^|/)(apps/desktop/src/(main|preload)/|packages/(domain|application|infrastructure|test-support)/src/)',
+        path: '(^|/)(apps/desktop/src/(main|preload)/|packages/(domain|application|infrastructure|workflows|test-support)/src/)',
       },
     },
     {
@@ -96,7 +96,7 @@ module.exports = {
       severity: 'error',
       from: { path: '(^|/)apps/desktop/src/preload/', pathNot: '\\.(test|spec)\\.ts$' },
       to: {
-        path: '(^|/)(apps/desktop/src/renderer/|packages/(domain|application|infrastructure|test-support)/src/)',
+        path: '(^|/)(apps/desktop/src/(main|renderer)/|packages/(domain|application|infrastructure|workflows|test-support)/src/)',
       },
     },
     {
@@ -115,7 +115,7 @@ module.exports = {
       severity: 'error',
       from: { path: '(^|/)apps/desktop/src/main/', pathNot: '\\.(test|spec)\\.ts$' },
       to: {
-        path: '(^|/)(apps/desktop/src/(renderer|preload)/|packages/(domain|application|infrastructure|test-support)/src/)',
+        path: '(^|/)(apps/desktop/src/(renderer|preload)/|packages/(domain|application|infrastructure|workflows|test-support)/src/)',
       },
     },
     {
