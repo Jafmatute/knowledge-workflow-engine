@@ -9,15 +9,16 @@
     "pnpm": ">=11.12.0 <12"
   },
   "scripts": {
+    "dev": "pnpm --filter @kwe/desktop dev",
     "build": "pnpm --recursive --if-present run build",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --project tsconfig.json && pnpm --recursive --if-present run typecheck",
     "test": "vitest run",
-    "test:integration": "node -e \"console.log('No integration test suite exists in S01-A.')\"",
-    "test:e2e": "node -e \"console.log('No E2E test suite exists in S01-A.')\"",
-    "check:architecture": "dependency-cruiser --config dependency-cruiser.cjs packages",
+    "test:integration": "node -e \"console.log('No integration test suite exists in S01-B.')\"",
+    "test:e2e": "node -e \"console.log('No E2E test suite exists in S01-B.')\"",
+    "check:architecture": "dependency-cruiser --config dependency-cruiser.cjs packages apps/desktop/src",
     "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm check:architecture && pnpm test && pnpm test:integration && pnpm test:e2e && pnpm build"
   },
   "devDependencies": {

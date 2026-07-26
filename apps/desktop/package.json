@@ -1,0 +1,32 @@
+{
+  "name": "@kwe/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": ".vite/build/main.cjs",
+  "scripts": {
+    "dev": "electron-forge start",
+    "build": "electron-forge package",
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "@kwe/contracts": "workspace:*",
+    "@kwe/schemas": "workspace:*",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "7.11.2",
+    "@electron-forge/plugin-fuses": "7.11.2",
+    "@electron-forge/plugin-vite": "7.11.2",
+    "@electron-forge/shared-types": "7.11.2",
+    "@electron/fuses": "2.1.3",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@tailwindcss/vite": "4.3.3",
+    "@vitejs/plugin-react": "6.0.4",
+    "electron": "43.2.0",
+    "tailwindcss": "4.3.3",
+    "vite": "8.1.5"
+  }
+}

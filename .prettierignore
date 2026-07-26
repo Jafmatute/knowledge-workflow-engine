@@ -2,6 +2,7 @@ node_modules/
 dist/
 build/
 out/
+**/.vite/
 coverage/
 release/
 artifacts/

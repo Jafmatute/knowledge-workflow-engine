@@ -42,6 +42,8 @@ node_modules/
 
 # Package builds
 dist/
+.vite/
+**/.vite/
 
 # Electron
 out/

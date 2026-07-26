@@ -56,11 +56,62 @@ module.exports = {
       },
       to: { path: '(^|/)packages/test-support/src/' },
     },
+    {
+      name: 'desktop-renderer-cannot-import-electron',
+      comment: 'The renderer cannot access Electron directly.',
+      severity: 'error',
+      from: { path: '(^|/)apps/desktop/src/renderer/', pathNot: '\\.(test|spec)\\.ts$' },
+      to: { path: '(^|/)node_modules/electron/' },
+    },
+    {
+      name: 'desktop-renderer-cannot-import-node',
+      comment: 'The renderer cannot access Node core modules.',
+      severity: 'error',
+      from: { path: '(^|/)apps/desktop/src/renderer/', pathNot: '\\.(test|spec)\\.ts$' },
+      to: { dependencyTypes: ['core'] },
+    },
+    {
+      name: 'desktop-renderer-cannot-import-privileged-code',
+      comment:
+        'The renderer only depends on React, contracts, schemas, and local renderer modules.',
+      severity: 'error',
+      from: { path: '(^|/)apps/desktop/src/renderer/', pathNot: '\\.(test|spec)\\.ts$' },
+      to: {
+        path: '(^|/)(apps/desktop/src/(main|preload)/|packages/(domain|application|infrastructure|test-support)/src/)',
+      },
+    },
+    {
+      name: 'desktop-preload-cannot-import-product-or-renderer-code',
+      comment: 'The preload exposes contracts, never renderer or product implementation code.',
+      severity: 'error',
+      from: { path: '(^|/)apps/desktop/src/preload/', pathNot: '\\.(test|spec)\\.ts$' },
+      to: {
+        path: '(^|/)(apps/desktop/src/renderer/|packages/(domain|application|infrastructure|test-support)/src/)',
+      },
+    },
+    {
+      name: 'desktop-main-cannot-import-product-code',
+      comment: 'S01-B main code only hosts Electron, contracts, and schemas.',
+      severity: 'error',
+      from: { path: '(^|/)apps/desktop/src/main/', pathNot: '\\.(test|spec)\\.ts$' },
+      to: {
+        path: '(^|/)(apps/desktop/src/(renderer|preload)/|packages/(domain|application|infrastructure|test-support)/src/)',
+      },
+    },
+    {
+      name: 'desktop-production-source-cannot-import-test-support',
+      comment: 'Desktop production source cannot import test support.',
+      severity: 'error',
+      from: {
+        path: '(^|/)apps/desktop/src/',
+        pathNot: '\\.(test|spec)\\.ts$',
+      },
+      to: { path: '(^|/)packages/test-support/src/' },
+    },
   ],
   options: {
     doNotFollow: { path: 'node_modules' },
     tsConfig: { fileName: 'tsconfig.json' },
-    includeOnly: '(^|/)packages/[^/]+/src/',
     reporterOptions: {
       dot: { collapsePattern: 'node_modules/[^/]+', theme: { graph: { splines: 'ortho' } } },
     },

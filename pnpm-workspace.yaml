@@ -1,2 +1,6 @@
 packages:
+  - 'apps/*'
   - 'packages/*'
+# Electron Forge requires @electron/node-gyp from its approved transitive dependency graph.
+blockExoticSubdeps: false
+nodeLinker: hoisted
