@@ -1,0 +1,101 @@
+name: Bug report
+description: Reportar un comportamiento incorrecto y reproducible
+title: "fix: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        No incluya API keys, documentos privados, tokens ni logs sin redactar.
+
+  - type: dropdown
+    id: slice
+    attributes:
+      label: Slice relacionado
+      options:
+        - S00 — Gobierno documental
+        - S01 — Bootstrap seguro
+        - S02 — Proyecto y workspace
+        - S03 — TXT y Markdown
+        - S04 — Resumen simulado
+        - S05 — Historial y renderizado genérico
+        - S06 — Gemini y secretos
+        - S07 — OpenAI y proveedores
+        - S08 — Múltiples fuentes
+        - S09 — PDF, JSON y CSV
+        - S10 — DOCX, PPTX y HTML
+        - S11 — Fuentes web
+        - S12 — Notion y Obsidian
+        - S13 — Knowledge map
+        - S14 — Experiencia de escritorio
+        - S15 — Robustez
+        - S16 — Empaquetado
+        - No determinado
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Versión o commit
+      placeholder: "Ejemplo: main @ abc1234"
+    validations:
+      required: true
+
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Comportamiento observado
+      description: Describa exactamente qué ocurrió.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Comportamiento esperado
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Pasos para reproducir
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Entorno
+      placeholder: |
+        Windows:
+        Node:
+        pnpm:
+        Provider/model:
+        Source type:
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidencia redactada
+      description: Incluya mensajes o capturas sin información sensible.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Verificaciones
+      options:
+        - label: Confirmé que no incluí secretos ni datos privados.
+          required: true
+        - label: Busqué issues existentes.
+          required: true
+        - label: El problema está dentro del alcance actual del MVP.
+          required: true

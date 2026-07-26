@@ -1,0 +1,73 @@
+name: Change proposal
+description: Proponer un cambio de producto, arquitectura o desarrollo
+title: "proposal: "
+labels:
+  - proposal
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Las propuestas deben respetar el alcance del MVP. Capacidades excluidas se registrarán para después del MVP, no se implementarán anticipadamente.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problema
+      description: Describa el problema concreto, no solo una solución preferida.
+    validations:
+      required: true
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Resultado esperado
+      description: Indique qué capacidad observable debería existir.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Relación con el alcance
+      options:
+        - Incluido en el MVP
+        - Corrección de una decisión existente
+        - Pospuesto para después del MVP
+        - Requiere modificar el alcance
+    validations:
+      required: true
+
+  - type: input
+    id: slice
+    attributes:
+      label: Slice propuesto
+      placeholder: "Ejemplo: S03"
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativas consideradas
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impacto
+      description: Arquitectura, seguridad, dependencias, UX, datos, empaquetado y pruebas.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: governance
+    attributes:
+      label: Gobierno
+      options:
+        - label: Revisé `docs/project-scope.md`.
+          required: true
+        - label: Revisé `docs/architecture.md`.
+          required: true
+        - label: Revisé `docs/implementation-plan.md`.
+          required: true
+        - label: Entiendo que una decisión relevante puede requerir un ADR.
+          required: true
