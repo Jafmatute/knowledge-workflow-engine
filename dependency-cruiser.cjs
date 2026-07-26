@@ -64,6 +64,16 @@ module.exports = {
       to: { path: '(^|/)node_modules/electron/' },
     },
     {
+      name: 'desktop-renderer-cannot-import-unapproved-runtime-package',
+      comment: 'The renderer only permits React and React DOM runtime packages.',
+      severity: 'error',
+      from: { path: '(^|/)apps/desktop/src/renderer/', pathNot: '\\.(test|spec)\\.ts$' },
+      to: {
+        dependencyTypes: ['npm', 'npm-no-pkg'],
+        pathNot: '(^|/)node_modules/(react|react-dom)/',
+      },
+    },
+    {
       name: 'desktop-renderer-cannot-import-node',
       comment: 'The renderer cannot access Node core modules.',
       severity: 'error',
@@ -90,12 +100,32 @@ module.exports = {
       },
     },
     {
+      name: 'desktop-preload-cannot-import-unapproved-runtime-package',
+      comment: 'The preload only permits Electron as an external runtime package.',
+      severity: 'error',
+      from: { path: '(^|/)apps/desktop/src/preload/', pathNot: '\\.(test|spec)\\.ts$' },
+      to: {
+        dependencyTypes: ['npm', 'npm-no-pkg'],
+        pathNot: '(^|/)node_modules/electron/',
+      },
+    },
+    {
       name: 'desktop-main-cannot-import-product-code',
       comment: 'S01-B main code only hosts Electron, contracts, and schemas.',
       severity: 'error',
       from: { path: '(^|/)apps/desktop/src/main/', pathNot: '\\.(test|spec)\\.ts$' },
       to: {
         path: '(^|/)(apps/desktop/src/(renderer|preload)/|packages/(domain|application|infrastructure|test-support)/src/)',
+      },
+    },
+    {
+      name: 'desktop-main-cannot-import-unapproved-runtime-package',
+      comment: 'S01-B main code only permits Electron and Node core modules.',
+      severity: 'error',
+      from: { path: '(^|/)apps/desktop/src/main/', pathNot: '\\.(test|spec)\\.ts$' },
+      to: {
+        dependencyTypes: ['npm', 'npm-no-pkg'],
+        pathNot: '(^|/)node_modules/electron/',
       },
     },
     {

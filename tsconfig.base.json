@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2024",
+    "lib": ["ES2024"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "baseUrl": ".",
@@ -8,6 +9,7 @@
     "paths": {
       "@kwe/*": ["packages/*/src/index.ts"]
     },
+    "types": [],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,

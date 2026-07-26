@@ -8,8 +8,8 @@ registerApplicationScheme();
 
 void app.whenReady().then(async () => {
   registerApplicationProtocol();
-  registerIpcHandlers();
-  await createMainWindow();
+  const mainWindow = await createMainWindow();
+  registerIpcHandlers(mainWindow);
 });
 
 app.on('window-all-closed', () => {

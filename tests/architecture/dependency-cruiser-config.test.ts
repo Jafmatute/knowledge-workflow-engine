@@ -42,4 +42,24 @@ describe('dependency-cruiser configuration', () => {
     expect(result.status).not.toBe(0);
     expect(`${result.stdout}${result.stderr}`).toContain('desktop-renderer-cannot-import-electron');
   });
+
+  it.each([
+    [
+      'tests/fixtures/architecture/apps/desktop/src/renderer/invalid-runtime-package.ts',
+      'desktop-renderer-cannot-import-unapproved-runtime-package',
+    ],
+    [
+      'tests/fixtures/architecture/apps/desktop/src/preload/invalid-runtime-package.ts',
+      'desktop-preload-cannot-import-unapproved-runtime-package',
+    ],
+    [
+      'tests/fixtures/architecture/apps/desktop/src/main/invalid-runtime-package.ts',
+      'desktop-main-cannot-import-unapproved-runtime-package',
+    ],
+  ])('reports unapproved desktop runtime package %s', (fixture, expectedRule) => {
+    const result = cruise([fixture]);
+
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}${result.stderr}`).toContain(expectedRule);
+  });
 });

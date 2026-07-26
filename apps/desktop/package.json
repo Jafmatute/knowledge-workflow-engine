@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "electron-forge start",
     "build": "electron-forge package",
-    "typecheck": "tsc --project tsconfig.json"
+    "typecheck": "tsc --project tsconfig.main.json && tsc --project tsconfig.preload.json && tsc --project tsconfig.renderer.json && tsc --project tsconfig.tools.json"
   },
   "dependencies": {
     "@kwe/contracts": "workspace:*",

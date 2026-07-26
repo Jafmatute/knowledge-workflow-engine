@@ -2,6 +2,12 @@ import { join } from 'node:path';
 
 import { BrowserWindow, session, type BrowserWindowConstructorOptions } from 'electron';
 
+import {
+  getApplicationDocumentUrl,
+  getNavigationMode,
+  isAllowedApplicationNavigation,
+} from './navigation-policy.js';
+
 export function getMainWindowOptions(preloadPath: string): BrowserWindowConstructorOptions {
   return {
     width: 1200,
@@ -23,11 +29,12 @@ export function getMainWindowOptions(preloadPath: string): BrowserWindowConstruc
 
 export async function createMainWindow(): Promise<BrowserWindow> {
   const mainWindow = new BrowserWindow(getMainWindowOptions(join(__dirname, 'preload.cjs')));
-  const allowedUrl = MAIN_WINDOW_VITE_DEV_SERVER_URL ?? 'kwe://renderer/index.html';
+  const navigationMode = getNavigationMode(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+  const applicationDocumentUrl = getApplicationDocumentUrl(navigationMode);
 
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   mainWindow.webContents.on('will-navigate', (event, navigationUrl) => {
-    if (!navigationUrl.startsWith(allowedUrl)) {
+    if (!isAllowedApplicationNavigation(navigationUrl, navigationMode)) {
       event.preventDefault();
     }
   });
@@ -37,11 +44,7 @@ export async function createMainWindow(): Promise<BrowserWindow> {
     callback(false);
   });
 
-  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    await mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
-  } else {
-    await mainWindow.loadURL(allowedUrl);
-  }
+  await mainWindow.loadURL(applicationDocumentUrl);
 
   return mainWindow;
 }
