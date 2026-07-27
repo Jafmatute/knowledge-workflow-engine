@@ -14,6 +14,8 @@ import {
 
 const UTILITY_TIMEOUT_MS = 5_000;
 
+export type State = 'starting' | 'request-sent' | 'terminal';
+
 export interface UtilityProcessHandle {
   postMessage(message: unknown): void;
   kill(): boolean;
@@ -25,7 +27,7 @@ export interface UtilityProcessHandle {
 type SpawnUtilityProcess = (modulePath: string) => UtilityProcessHandle;
 
 function spawnUtilityProcess(modulePath: string): UtilityProcessHandle {
-  const process = utilityProcess.fork(modulePath, [], { sandbox: false });
+  const process = utilityProcess.fork(modulePath);
 
   return {
     postMessage: (message) => process.postMessage(message),
@@ -46,14 +48,18 @@ export function createComputeDiagnosticHashHandler(
     const worker = spawn(workerPath);
 
     return new Promise((resolve, reject) => {
+      let state: State = 'starting';
       let settled = false;
+
       const settle = (action: () => void) => {
         if (settled) return;
         settled = true;
+        state = 'terminal';
         clearTimeout(timeout);
         worker.kill();
         action();
       };
+
       const timeout = setTimeout(() => {
         settle(() => reject(new Error('Utility process timed out.')));
       }, UTILITY_TIMEOUT_MS);
@@ -61,25 +67,53 @@ export function createComputeDiagnosticHashHandler(
       worker.onMessage((message: unknown) => {
         try {
           if (utilityReadySchema.safeParse(message).success) {
-            worker.postMessage({ kind: 'diagnostic-hash-request', requestId, input: validatedInput });
+            if (state !== 'starting') {
+              settle(() => reject(new Error('Unexpected utility-ready transition.')));
+              return;
+            }
+            state = 'request-sent';
+            worker.postMessage({
+              kind: 'diagnostic-hash-request',
+              requestId,
+              input: validatedInput,
+            });
             return;
           }
+
+          if (state !== 'request-sent') {
+            settle(() => reject(new Error('Unexpected utility process response.')));
+            return;
+          }
+
           const response = utilityDiagnosticHashResponseSchema.parse(message);
           if (response.requestId !== requestId) {
-            throw new Error('Utility process returned an unexpected response.');
+            settle(() => reject(new Error('Utility process request identifier mismatch.')));
+            return;
           }
+
           if (response.kind === 'diagnostic-hash-failure') {
             settle(() => reject(new Error('Utility process failed.')));
             return;
           }
+
           settle(() => resolve(diagnosticHashResultSchema.parse(response.result)));
         } catch {
           settle(() => reject(new Error('Utility process returned an invalid response.')));
         }
       });
-      worker.onError(() => settle(() => reject(new Error('Utility process failed.'))));
+
       worker.onExit((code) => {
-        if (code !== 0) settle(() => reject(new Error('Utility process exited unexpectedly.')));
+        if (state === 'terminal') return;
+        const message =
+          code === 0
+            ? 'Utility process exited before completing.'
+            : `Utility process exited unexpectedly (${code}).`;
+        settle(() => reject(new Error(message)));
+      });
+
+      worker.onError(() => {
+        if (state === 'terminal') return;
+        settle(() => reject(new Error('Utility process failed.')));
       });
     });
   };

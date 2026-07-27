@@ -1,7 +1,5 @@
 import { createHash } from 'node:crypto';
 
-import { parentPort } from 'electron';
-
 import {
   diagnosticHashResultSchema,
   utilityDiagnosticHashRequestSchema,
@@ -19,20 +17,21 @@ export function calculateDiagnosticHash(text: string): DiagnosticHashResult {
   return diagnosticHashResultSchema.parse(result);
 }
 
-if (parentPort !== undefined) {
-  parentPort.on('message', (message: unknown) => {
-    try {
-      const request = utilityDiagnosticHashRequestSchema.parse(message);
-      parentPort.postMessage(
-        utilityDiagnosticHashSuccessSchema.parse({
-          kind: 'diagnostic-hash-success',
-          requestId: request.requestId,
-          result: calculateDiagnosticHash(request.input.text),
-        }),
-      );
-    } catch {
-      // Invalid messages are untrusted and cannot be correlated safely.
-    }
+const port = process.parentPort;
+
+if (port !== undefined) {
+  port.on('message', (message: unknown) => {
+    const parsed = utilityDiagnosticHashRequestSchema.safeParse(message);
+    if (!parsed.success) return;
+
+    port.postMessage(
+      utilityDiagnosticHashSuccessSchema.parse({
+        kind: 'diagnostic-hash-success',
+        requestId: parsed.data.requestId,
+        result: calculateDiagnosticHash(parsed.data.input.text),
+      }),
+    );
   });
-  parentPort.postMessage(utilityReadySchema.parse({ kind: 'utility-ready' }));
+
+  port.postMessage(utilityReadySchema.parse({ kind: 'utility-ready' }));
 }

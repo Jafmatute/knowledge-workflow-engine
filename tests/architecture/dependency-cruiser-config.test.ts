@@ -80,6 +80,10 @@ describe('dependency-cruiser configuration', () => {
       'tests/fixtures/architecture/apps/desktop/src/utility/invalid-runtime-package.ts',
       'desktop-utility-cannot-import-unapproved-runtime-package',
     ],
+    [
+      'tests/fixtures/architecture/apps/desktop/src/utility/invalid-infrastructure-package.ts',
+      'desktop-utility-cannot-import-desktop-or-product-code',
+    ],
   ])('reports forbidden desktop dependency %s', (fixture, expectedRule) => {
     const result = cruise([fixture]);
 

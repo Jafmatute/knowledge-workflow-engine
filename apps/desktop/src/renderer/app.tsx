@@ -3,10 +3,7 @@ import { useEffect, useState } from 'react';
 type AppInfoState =
   { status: 'loading' } | { status: 'ready'; version: string } | { status: 'error' };
 type HashState =
-  | { status: 'idle' }
-  | { status: 'running' }
-  | { status: 'ready' }
-  | { status: 'error' };
+  { status: 'idle' } | { status: 'running' } | { status: 'ready' } | { status: 'error' };
 
 export function App() {
   const [appInfo, setAppInfo] = useState<AppInfoState>({ status: 'loading' });
