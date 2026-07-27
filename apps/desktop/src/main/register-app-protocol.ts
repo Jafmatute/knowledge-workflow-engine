@@ -1,8 +1,7 @@
-import { access } from 'node:fs/promises';
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { access, readFile } from 'node:fs/promises';
+import { extname, join } from 'node:path';
 
-import { net, protocol } from 'electron';
+import { protocol } from 'electron';
 
 import { resolveRendererAsset } from './renderer-asset-path.js';
 
@@ -20,7 +19,15 @@ export function registerApplicationScheme(): void {
 }
 
 export function registerApplicationProtocol(): void {
-  const rendererBundleRoot = join(__dirname, '..', 'renderer', MAIN_WINDOW_VITE_NAME);
+  // Forge's Vite renderer output preserves the configured source root inside the ASAR.
+  const rendererBundleRoot = join(
+    __dirname,
+    '..',
+    'renderer',
+    MAIN_WINDOW_VITE_NAME,
+    'src',
+    'renderer',
+  );
 
   protocol.handle('kwe', async (request) => {
     const assetPath = resolveRendererAsset(rendererBundleRoot, request.url);
@@ -31,7 +38,15 @@ export function registerApplicationProtocol(): void {
 
     try {
       await access(assetPath);
-      return net.fetch(pathToFileURL(assetPath).toString());
+      const contentType =
+        extname(assetPath) === '.html'
+          ? 'text/html; charset=utf-8'
+          : extname(assetPath) === '.js'
+            ? 'text/javascript; charset=utf-8'
+            : extname(assetPath) === '.css'
+              ? 'text/css; charset=utf-8'
+              : 'application/octet-stream';
+      return new Response(await readFile(assetPath), { headers: { 'content-type': contentType } });
     } catch {
       return new Response('Not found', { status: 404 });
     }

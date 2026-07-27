@@ -73,6 +73,22 @@ p {
   color: var(--color-text-primary);
 }
 
+.shell__action {
+  background: var(--color-bg-panel);
+  border: 1px solid var(--color-border-focus);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  margin-top: 1.5rem;
+  min-height: 34px;
+  padding: 0 0.75rem;
+}
+
+.shell__hash {
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  margin-top: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
 :focus-visible {
   outline: 2px solid var(--color-border-focus);
   outline-offset: 3px;
