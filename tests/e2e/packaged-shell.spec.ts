@@ -1,37 +1,20 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer, type AddressInfo } from 'node:net';
-import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { chromium, expect, test, type Page } from '@playwright/test';
 
+import {
+  findPackagedApplicationExecutable,
+  findWindowsX64PackageDirectory,
+} from '../helpers/package-layout.js';
+
 const OUTPUT_DIR = join(process.cwd(), 'apps', 'desktop', 'out');
-const APP_EXE = 'knowledge-workflow-engine.exe';
 const STARTUP_DEADLINE_MS = 15_000;
 const CDP_POLL_INTERVAL_MS = 200;
+const TRUSTED_PAGE_URL_PREFIX = 'kwe://renderer/';
 
-function findPackageDir(): string {
-  const entries = readdirSync(OUTPUT_DIR, { withFileTypes: true });
-  const dirs = entries
-    .filter((e) => e.isDirectory() && e.name.endsWith('-win32-x64'))
-    .map((e) => join(OUTPUT_DIR, e.name))
-    .sort();
-  if (dirs.length === 0) {
-    throw new Error('No Windows x64 Electron package found under out/.');
-  }
-  const last = dirs[dirs.length - 1];
-  if (last === undefined) throw new Error('No Windows x64 Electron package found under out/.');
-  return last;
-}
-
-function findAppExecutable(): string {
-  const pkgDir = findPackageDir();
-  const exePath = join(pkgDir, APP_EXE);
-  if (!existsSync(exePath)) {
-    throw new Error(`Application executable not found: ${APP_EXE}`);
-  }
-  return exePath;
-}
+test.setTimeout(60_000);
 
 async function findFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -44,12 +27,33 @@ async function findFreePort(): Promise<number> {
   });
 }
 
-function getWindow(browser: Awaited<ReturnType<typeof chromium.connectOverCDP>>): Page {
-  const context = browser.contexts()[0];
-  if (context === undefined) throw new Error('No browser context.');
-  const window = context.pages()[0];
-  if (window === undefined) throw new Error('No page.');
-  return window;
+async function waitForChildPage(
+  browser: Awaited<ReturnType<typeof chromium.connectOverCDP>>,
+): Promise<Page> {
+  const deadline = Date.now() + STARTUP_DEADLINE_MS;
+
+  while (Date.now() < deadline) {
+    const contexts = browser.contexts();
+    if (contexts.length >= 1) {
+      const pages = contexts[0]!.pages();
+      if (pages.length >= 1) {
+        const page = pages[0]!;
+        const url = page.url();
+        if (url.startsWith(TRUSTED_PAGE_URL_PREFIX)) {
+          return page;
+        }
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, CDP_POLL_INTERVAL_MS));
+  }
+
+  // One last check for diagnostics
+  const contexts = browser.contexts();
+  if (contexts.length === 0) throw new Error('No browser context appeared.');
+  const pages = contexts[0]!.pages();
+  if (pages.length === 0) throw new Error('No page appeared.');
+  const url = pages[0]!.url();
+  throw new Error(`Trusted page did not appear. Page URL: ${url}`);
 }
 
 test('verifies the complete S01 security surface of the packaged shell', async () => {
@@ -57,7 +61,7 @@ test('verifies the complete S01 security surface of the packaged shell', async (
   const stderrChunks: Buffer[] = [];
 
   const application: ChildProcess = spawn(
-    findAppExecutable(),
+    findPackagedApplicationExecutable(findWindowsX64PackageDirectory(OUTPUT_DIR)),
     [`--remote-debugging-port=${port}`],
     { stdio: ['ignore', 'ignore', 'pipe'] },
   );
@@ -98,7 +102,8 @@ test('verifies the complete S01 security surface of the packaged shell', async (
       );
     }
 
-    const window = getWindow(browser);
+    // Wait for the trusted application page
+    const window = await waitForChildPage(browser);
 
     // Exactly one application context and one page
     expect(browser.contexts()).toHaveLength(1);
@@ -107,7 +112,7 @@ test('verifies the complete S01 security surface of the packaged shell', async (
 
     // Heading and version
     await expect(window.getByRole('heading', { name: 'Secure desktop shell ready' })).toBeVisible({
-      timeout: 5_000,
+      timeout: 10_000,
     });
     await expect(window.getByText('Application version: 0.1.0')).toBeVisible();
 

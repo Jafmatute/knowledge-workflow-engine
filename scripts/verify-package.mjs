@@ -1,32 +1,21 @@
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { listPackage } from '@electron/asar';
 
-const OUTPUT_DIR = join(process.cwd(), 'apps', 'desktop', 'out');
-const APP_EXE = 'knowledge-workflow-engine.exe';
+import {
+  APP_EXE,
+  findPackagedApplicationExecutable,
+  findWindowsX64PackageDirectory,
+} from './package-layout.mjs';
 
-function findPackageDir() {
-  const entries = readdirSync(OUTPUT_DIR, { withFileTypes: true });
-  const dirs = entries
-    .filter((e) => e.isDirectory() && e.name.endsWith('-win32-x64'))
-    .map((e) => join(OUTPUT_DIR, e.name))
-    .sort();
-  if (dirs.length === 0) {
-    throw new Error('No Windows x64 Electron package found under out/.');
-  }
-  return dirs[dirs.length - 1];
-}
+const OUTPUT_DIR = join(process.cwd(), 'apps', 'desktop', 'out');
 
 async function main() {
-  const pkgDir = findPackageDir();
+  const pkgDir = findWindowsX64PackageDirectory(OUTPUT_DIR);
+  const exePath = findPackagedApplicationExecutable(pkgDir);
 
-  // Exact application executable
-  const exePath = join(pkgDir, APP_EXE);
-  if (!existsSync(exePath)) {
-    throw new Error(`Application executable not found: ${APP_EXE} in ${pkgDir}`);
-  }
-  console.log(`  ✓ ${APP_EXE}`);
+  console.log(`  ✓ ${APP_EXE}  (${exePath})`);
 
   // Resources directory
   const resourcesDir = join(pkgDir, 'resources');

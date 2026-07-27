@@ -1,32 +1,14 @@
-import { existsSync, mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { describe, expect, it } from 'vitest';
 
-const APP_EXE = 'knowledge-workflow-engine.exe';
-
-function findPackageDir(outputDir: string): string {
-  const entries = readdirSync(outputDir, { withFileTypes: true });
-  const dirs = entries
-    .filter((e) => e.isDirectory() && e.name.endsWith('-win32-x64'))
-    .map((e) => join(outputDir, e.name))
-    .sort();
-  if (dirs.length === 0) {
-    throw new Error('No Windows x64 Electron package found.');
-  }
-  const last = dirs[dirs.length - 1];
-  if (last === undefined) throw new Error('No Windows x64 Electron package found.');
-  return last;
-}
-
-function findAppExecutable(packageDir: string): string {
-  const exePath = join(packageDir, APP_EXE);
-  if (!existsSync(exePath)) {
-    throw new Error(`Application executable not found: ${APP_EXE}`);
-  }
-  return exePath;
-}
+import {
+  APP_EXE,
+  findPackagedApplicationExecutable,
+  findWindowsX64PackageDirectory,
+} from '../helpers/package-layout.js';
 
 function withTempDir(fn: (dir: string) => void): void {
   const dir = mkdtempSync(join(tmpdir(), 'kwe-pkg-test-'));
@@ -54,7 +36,7 @@ describe('package discovery', () => {
       touch(join(pkg, APP_EXE));
       touch(join(pkg, 'chrome_crashpad_handler.exe'));
 
-      const selected = findAppExecutable(pkg);
+      const selected = findPackagedApplicationExecutable(pkg);
       expect(selected).toBe(join(pkg, APP_EXE));
     });
   });
@@ -64,32 +46,48 @@ describe('package discovery', () => {
       const pkg = makePkgDir(tmp, '@kwe-desktop-win32-x64');
       touch(join(pkg, 'chrome_crashpad_handler.exe'));
 
-      expect(() => findAppExecutable(pkg)).toThrow('Application executable not found');
+      expect(() => findPackagedApplicationExecutable(pkg)).toThrow(
+        'Application executable not found',
+      );
     });
   });
 
-  it('fails when the application executable is missing entirely', () => {
+  it('fails when the application executable path is a directory', () => {
     withTempDir((tmp) => {
       const pkg = makePkgDir(tmp, '@kwe-desktop-win32-x64');
+      mkdirSync(join(pkg, APP_EXE));
 
-      expect(() => findAppExecutable(pkg)).toThrow('Application executable not found');
+      expect(() => findPackagedApplicationExecutable(pkg)).toThrow('not a regular file');
     });
   });
 
   it('fails when no package directory exists', () => {
     withTempDir((tmp) => {
-      expect(() => findPackageDir(tmp)).toThrow('No Windows x64 Electron package found');
+      expect(() => findWindowsX64PackageDirectory(tmp)).toThrow(
+        'No Windows x64 Electron package directory found',
+      );
     });
   });
 
-  it('selects the last directory when multiple package directories exist', () => {
+  it('fails when multiple matching package directories exist', () => {
     withTempDir((tmp) => {
-      makePkgDir(tmp, '@kwe-desktop-win32-x64');
-      const second = makePkgDir(tmp, 'another-desktop-win32-x64');
-      touch(join(second, APP_EXE));
+      makePkgDir(tmp, 'first-win32-x64');
+      makePkgDir(tmp, 'second-win32-x64');
 
-      const selected = findPackageDir(tmp);
-      expect(selected).toBe(second);
+      expect(() => findWindowsX64PackageDirectory(tmp)).toThrow(
+        'Multiple Windows x64 package directories found',
+      );
+    });
+  });
+
+  it('selects the single valid package among nonmatching directories', () => {
+    withTempDir((tmp) => {
+      makePkgDir(tmp, 'some-other-dir');
+      const valid = makePkgDir(tmp, 'knowledge-workflow-engine-win32-x64');
+      touch(join(valid, APP_EXE));
+
+      const selected = findWindowsX64PackageDirectory(tmp);
+      expect(selected).toBe(valid);
     });
   });
 });
