@@ -3,6 +3,11 @@
   "compilerOptions": {
     "types": ["node"]
   },
-  "include": ["vitest.config.ts", "playwright.config.ts", "tests/**/*.ts"],
+  "include": [
+    "vitest.config.ts",
+    "playwright.config.ts",
+    "tests/**/*.ts",
+    "scripts/package-layout.d.mts"
+  ],
   "exclude": ["tests/fixtures/**/*.ts"]
 }

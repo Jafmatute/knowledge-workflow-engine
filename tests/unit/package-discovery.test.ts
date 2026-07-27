@@ -8,7 +8,7 @@ import {
   APP_EXE,
   findPackagedApplicationExecutable,
   findWindowsX64PackageDirectory,
-} from '../helpers/package-layout.js';
+} from '../../scripts/package-layout.mjs';
 
 function withTempDir(fn: (dir: string) => void): void {
   const dir = mkdtempSync(join(tmpdir(), 'kwe-pkg-test-'));

@@ -19,15 +19,10 @@ export function registerApplicationScheme(): void {
 }
 
 export function registerApplicationProtocol(): void {
-  // Forge's Vite renderer output preserves the configured source root inside the ASAR.
-  const rendererBundleRoot = join(
-    __dirname,
-    '..',
-    'renderer',
-    MAIN_WINDOW_VITE_NAME,
-    'src',
-    'renderer',
-  );
+  // Forge Vite plugin places the renderer output at .vite/renderer/<name>/.
+  // With root set to src/renderer and base './', all assets are emitted
+  // at the renderer output root without a nested source path.
+  const rendererBundleRoot = join(__dirname, '..', 'renderer', MAIN_WINDOW_VITE_NAME);
 
   protocol.handle('kwe', async (request) => {
     const assetPath = resolveRendererAsset(rendererBundleRoot, request.url);

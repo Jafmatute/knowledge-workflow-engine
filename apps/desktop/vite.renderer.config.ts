@@ -4,6 +4,8 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
+const rendererRoot = resolve(import.meta.dirname, 'src/renderer');
+
 const developmentCsp = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline'",
@@ -29,9 +31,13 @@ const productionCsp = [
 ].join('; ');
 
 export default defineConfig(({ mode }) => ({
+  root: rendererRoot,
+  base: './',
   build: {
+    outDir: resolve(import.meta.dirname, '.vite/renderer/main_window'),
+    emptyOutDir: true,
     rollupOptions: {
-      input: resolve(import.meta.dirname, 'src/renderer/index.html'),
+      input: resolve(rendererRoot, 'index.html'),
     },
   },
   plugins: [

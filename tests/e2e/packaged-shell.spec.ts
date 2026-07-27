@@ -7,12 +7,12 @@ import { chromium, expect, test, type Page } from '@playwright/test';
 import {
   findPackagedApplicationExecutable,
   findWindowsX64PackageDirectory,
-} from '../helpers/package-layout.js';
+} from '../../scripts/package-layout.mjs';
 
 const OUTPUT_DIR = join(process.cwd(), 'apps', 'desktop', 'out');
 const STARTUP_DEADLINE_MS = 15_000;
 const CDP_POLL_INTERVAL_MS = 200;
-const TRUSTED_PAGE_URL_PREFIX = 'kwe://renderer/';
+const TRUSTED_PAGE_URL = 'kwe://renderer/index.html';
 
 test.setTimeout(60_000);
 
@@ -27,19 +27,16 @@ async function findFreePort(): Promise<number> {
   });
 }
 
-async function waitForChildPage(
+async function waitForTrustedPage(
   browser: Awaited<ReturnType<typeof chromium.connectOverCDP>>,
 ): Promise<Page> {
   const deadline = Date.now() + STARTUP_DEADLINE_MS;
 
   while (Date.now() < deadline) {
-    const contexts = browser.contexts();
-    if (contexts.length >= 1) {
-      const pages = contexts[0]!.pages();
-      if (pages.length >= 1) {
-        const page = pages[0]!;
+    for (const context of browser.contexts()) {
+      for (const page of context.pages()) {
         const url = page.url();
-        if (url.startsWith(TRUSTED_PAGE_URL_PREFIX)) {
+        if (url === TRUSTED_PAGE_URL) {
           return page;
         }
       }
@@ -47,18 +44,24 @@ async function waitForChildPage(
     await new Promise((resolve) => setTimeout(resolve, CDP_POLL_INTERVAL_MS));
   }
 
-  // One last check for diagnostics
-  const contexts = browser.contexts();
-  if (contexts.length === 0) throw new Error('No browser context appeared.');
-  const pages = contexts[0]!.pages();
-  if (pages.length === 0) throw new Error('No page appeared.');
-  const url = pages[0]!.url();
-  throw new Error(`Trusted page did not appear. Page URL: ${url}`);
+  // Diagnostics
+  const diagnostics: string[] = [];
+  for (const ctx of browser.contexts()) {
+    for (const p of ctx.pages()) {
+      diagnostics.push(`${p.url()} (context ${browser.contexts().indexOf(ctx)})`);
+    }
+  }
+  throw new Error(
+    `Trusted page did not appear. Pages found: ${diagnostics.length > 0 ? diagnostics.join('; ') : 'none'}`,
+  );
 }
 
 test('verifies the complete S01 security surface of the packaged shell', async () => {
   const port = await findFreePort();
   const stderrChunks: Buffer[] = [];
+  const consoleErrors: string[] = [];
+  const pageErrors: string[] = [];
+  const failedKweRequests: string[] = [];
 
   const application: ChildProcess = spawn(
     findPackagedApplicationExecutable(findWindowsX64PackageDirectory(OUTPUT_DIR)),
@@ -102,13 +105,30 @@ test('verifies the complete S01 security surface of the packaged shell', async (
       );
     }
 
-    // Wait for the trusted application page
-    const window = await waitForChildPage(browser);
+    const window = await waitForTrustedPage(browser);
+
+    // Collect diagnostics
+    window.on('console', (msg) => {
+      if (msg.type() === 'error') {
+        consoleErrors.push(msg.text().slice(0, 500));
+      }
+    });
+    window.on('pageerror', (err) => {
+      pageErrors.push(err.message.slice(0, 500));
+    });
+    window.on('requestfailed', (request) => {
+      if (request.url().startsWith('kwe://')) {
+        failedKweRequests.push(`${request.url()} — ${request.failure()?.errorText ?? 'unknown'}`);
+      }
+    });
 
     // Exactly one application context and one page
     expect(browser.contexts()).toHaveLength(1);
     const context = browser.contexts()[0];
     expect(context!.pages()).toHaveLength(1);
+
+    // Trusted URL
+    expect(window.url()).toBe(TRUSTED_PAGE_URL);
 
     // Heading and version
     await expect(window.getByRole('heading', { name: 'Secure desktop shell ready' })).toBeVisible({
@@ -119,6 +139,11 @@ test('verifies the complete S01 security surface of the packaged shell', async (
     // Utility diagnostic reaches ready
     await window.getByRole('button', { name: 'Verify utility process' }).click();
     await expect(window.getByText('Utility process: Ready')).toBeVisible();
+
+    // Assert no failed kwe: asset requests
+    if (failedKweRequests.length > 0) {
+      throw new Error(`Failed kwe:// requests: ${failedKweRequests.join('; ')}`);
+    }
 
     // No Node globals in the renderer
     expect(await window.evaluate('typeof window.require')).toBe('undefined');
@@ -142,8 +167,14 @@ test('verifies the complete S01 security surface of the packaged shell', async (
 
     // An external navigation attempt does not replace the document
     const currentUrl = window.url();
-    await window.evaluate('window.location.href="https://example.com"');
-    await expect(window).toHaveURL(currentUrl);
+    try {
+      await window.evaluate('window.location.href="https://example.com"');
+    } catch {
+      // Navigation rejected immediately; expected.
+    }
+    await expect
+      .poll(() => window.url(), { timeout: 5_000 })
+      .toBe(currentUrl);
 
     // Close cleanly
     await window.close();
