@@ -86,6 +86,30 @@ describe('hash worker', () => {
     }
   });
 
+  it('extracts the payload from an Electron-shaped event', () => {
+    const event = {
+      data: {
+        kind: 'diagnostic-hash-request' as const,
+        requestId,
+        input: { text: 'abc' },
+      },
+    };
+
+    // Passing the event wrapper directly must fail (null) …
+    expect(handleDiagnosticHashRequest(event)).toBeNull();
+    // … while passing event.data succeeds.
+    const result = handleDiagnosticHashRequest(event.data);
+    expect(result).not.toBeNull();
+    if (result?.kind === 'diagnostic-hash-success') {
+      expect(result.result.digest).toMatch(/^[a-f0-9]{64}$/);
+    }
+  });
+
+  it('ignores malformed event.data without response', () => {
+    const event = { data: { random: true } };
+    expect(handleDiagnosticHashRequest(event.data)).toBeNull();
+  });
+
   it('failure output passes its Zod schema', () => {
     const throwingHash = (_text: string): never => {
       throw new Error('any error');

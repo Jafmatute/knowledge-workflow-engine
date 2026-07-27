@@ -44,8 +44,8 @@ export function handleDiagnosticHashRequest(
 const port = process.parentPort;
 
 if (port !== undefined) {
-  port.on('message', (message: unknown) => {
-    const response = handleDiagnosticHashRequest(message);
+  port.on('message', (event: { data: unknown }) => {
+    const response = handleDiagnosticHashRequest(event.data);
     if (response !== null) {
       port.postMessage(response);
     }

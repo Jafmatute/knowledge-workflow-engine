@@ -69,4 +69,11 @@ async function run() {
 
 void run()
   .then(() => app.quit())
-  .catch(() => app.exit(1));
+  .catch((error) => {
+    console.error(
+      error instanceof Error
+        ? `Utility integration failed: ${error.message}`
+        : 'Utility integration failed.',
+    );
+    app.exit(1);
+  });
