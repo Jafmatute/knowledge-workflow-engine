@@ -24,4 +24,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm check:architecture
       - run: pnpm test
+      - run: pnpm test:integration
       - run: pnpm build
+      - run: pnpm verify:package
+      - run: pnpm test:e2e

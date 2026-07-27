@@ -119,6 +119,26 @@ module.exports = {
       },
     },
     {
+      name: 'desktop-utility-cannot-import-desktop-or-product-code',
+      comment: 'Utility processes are isolated workers with only schemas and Node runtime access.',
+      severity: 'error',
+      from: { path: '(^|/)apps/desktop/src/utility/', pathNot: '\\.(test|spec)\\.ts$' },
+      to: {
+        path: '(^|/)(apps/desktop/src/(main|preload|renderer)/|packages/(domain|application|contracts|infrastructure|workflows|test-support)/src/)',
+      },
+    },
+    {
+      name: 'desktop-utility-cannot-import-unapproved-runtime-package',
+      comment:
+        'Utility processes use only Electron, Node core modules, and shared schemas in S01-C.',
+      severity: 'error',
+      from: { path: '(^|/)apps/desktop/src/utility/', pathNot: '\\.(test|spec)\\.ts$' },
+      to: {
+        dependencyTypes: ['npm', 'npm-no-pkg'],
+        pathNot: '(^|/)node_modules/electron/',
+      },
+    },
+    {
       name: 'desktop-main-cannot-import-unapproved-runtime-package',
       comment: 'S01-B main code only permits Electron and Node core modules.',
       severity: 'error',
