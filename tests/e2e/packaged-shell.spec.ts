@@ -172,9 +172,7 @@ test('verifies the complete S01 security surface of the packaged shell', async (
     } catch {
       // Navigation rejected immediately; expected.
     }
-    await expect
-      .poll(() => window.url(), { timeout: 5_000 })
-      .toBe(currentUrl);
+    await expect.poll(() => window.url(), { timeout: 5_000 }).toBe(currentUrl);
 
     // Close cleanly
     await window.close();
