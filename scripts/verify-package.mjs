@@ -4,29 +4,29 @@ import { join } from 'node:path';
 import { listPackage } from '@electron/asar';
 
 const OUTPUT_DIR = join(process.cwd(), 'apps', 'desktop', 'out');
+const APP_EXE = 'knowledge-workflow-engine.exe';
 
 function findPackageDir() {
   const entries = readdirSync(OUTPUT_DIR, { withFileTypes: true });
-  const dir = entries
+  const dirs = entries
     .filter((e) => e.isDirectory() && e.name.endsWith('-win32-x64'))
     .map((e) => join(OUTPUT_DIR, e.name))
-    .sort()
-    .at(-1);
-  if (dir === undefined) {
+    .sort();
+  if (dirs.length === 0) {
     throw new Error('No Windows x64 Electron package found under out/.');
   }
-  return dir;
+  return dirs[dirs.length - 1];
 }
 
 async function main() {
   const pkgDir = findPackageDir();
 
-  // Executable exists
-  const exe = readdirSync(pkgDir, { withFileTypes: true }).find(
-    (e) => e.isFile() && e.name.endsWith('.exe'),
-  );
-  if (exe === undefined) throw new Error(`Missing executable in ${pkgDir}`);
-  console.log(`  ✓ ${exe.name}`);
+  // Exact application executable
+  const exePath = join(pkgDir, APP_EXE);
+  if (!existsSync(exePath)) {
+    throw new Error(`Application executable not found: ${APP_EXE} in ${pkgDir}`);
+  }
+  console.log(`  ✓ ${APP_EXE}`);
 
   // Resources directory
   const resourcesDir = join(pkgDir, 'resources');
