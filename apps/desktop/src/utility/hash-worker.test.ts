@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import { calculateDiagnosticHash, handleDiagnosticHashRequest } from './hash-worker.js';
+import {
+  utilityDiagnosticHashFailureSchema,
+  utilityDiagnosticHashSuccessSchema,
+} from '@kwe/schemas';
 
 describe('hash worker', () => {
   const requestId = '0a8d2ce5-8a93-49bc-aef7-4c5bb6e1c427';
@@ -13,22 +17,23 @@ describe('hash worker', () => {
   });
 
   it('returns a success envelope for a valid request', () => {
-    const result = handleDiagnosticHashRequest(
-      { kind: 'diagnostic-hash-request', requestId, input: { text: 'abc' } },
-      calculateDiagnosticHash,
-    );
-
-    expect(result).toMatchObject({
-      kind: 'diagnostic-hash-success',
+    const result = handleDiagnosticHashRequest({
+      kind: 'diagnostic-hash-request',
       requestId,
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      result: expect.objectContaining({ algorithm: 'sha256' }),
+      input: { text: 'abc' },
     });
+
+    expect(result).not.toBeNull();
+    if (result?.kind === 'diagnostic-hash-success') {
+      expect(result.requestId).toBe(requestId);
+      expect(result.result.algorithm).toBe('sha256');
+      expect(result.result.digest).toMatch(/^[a-f0-9]{64}$/);
+    }
   });
 
   it('returns null for an uncorrelatable message', () => {
     const message: unknown = { random: true };
-    const result = handleDiagnosticHashRequest(message, calculateDiagnosticHash);
+    const result = handleDiagnosticHashRequest(message);
 
     expect(result).toBeNull();
   });
@@ -43,10 +48,57 @@ describe('hash worker', () => {
       throwingHash,
     );
 
-    expect(result).toMatchObject({
-      kind: 'diagnostic-hash-failure',
+    expect(result).not.toBeNull();
+    if (result?.kind === 'diagnostic-hash-failure') {
+      expect(result.requestId).toBe(requestId);
+      expect(result.error).toEqual({ code: 'UTILITY_PROCESS_FAILED' });
+    }
+  });
+
+  it('failure envelope does not contain the exception message or source text', () => {
+    const throwingHash = (_text: string): never => {
+      throw new Error('this message must not appear');
+    };
+
+    const result = handleDiagnosticHashRequest(
+      { kind: 'diagnostic-hash-request', requestId, input: { text: 'sensitive input' } },
+      throwingHash,
+    );
+
+    expect(result).not.toBeNull();
+    if (result?.kind === 'diagnostic-hash-failure') {
+      const serialized = JSON.stringify(result);
+      expect(serialized).not.toContain('this message must not appear');
+      expect(serialized).not.toContain('sensitive input');
+    }
+  });
+
+  it('success output passes its Zod schema', () => {
+    const result = handleDiagnosticHashRequest({
+      kind: 'diagnostic-hash-request',
       requestId,
-      error: { code: 'UTILITY_PROCESS_FAILED' },
+      input: { text: 'abc' },
     });
+
+    expect(result).not.toBeNull();
+    if (result?.kind === 'diagnostic-hash-success') {
+      expect(() => utilityDiagnosticHashSuccessSchema.parse(result)).not.toThrow();
+    }
+  });
+
+  it('failure output passes its Zod schema', () => {
+    const throwingHash = (_text: string): never => {
+      throw new Error('any error');
+    };
+
+    const result = handleDiagnosticHashRequest(
+      { kind: 'diagnostic-hash-request', requestId, input: { text: 'abc' } },
+      throwingHash,
+    );
+
+    expect(result).not.toBeNull();
+    if (result?.kind === 'diagnostic-hash-failure') {
+      expect(() => utilityDiagnosticHashFailureSchema.parse(result)).not.toThrow();
+    }
   });
 });

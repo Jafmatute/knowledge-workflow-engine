@@ -51,7 +51,7 @@ async function run() {
       }
     });
 
-    worker.once('error', (type) => {
+    worker.once('error', () => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
@@ -70,4 +70,3 @@ async function run() {
 void run()
   .then(() => app.quit())
   .catch(() => app.exit(1));
-
