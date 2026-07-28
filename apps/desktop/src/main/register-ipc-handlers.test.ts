@@ -156,13 +156,11 @@ describe('createProjectHandlers', () => {
     const pCreate = dialog._create;
     const rCreate = repo._create;
 
-    // Failed create should not set active
     const handlers = createHandlers(dialog, repo);
     await handlers.create({ name: '' });
 
     expect(getActiveProject()).toBeNull();
 
-    // Successful create should set active
     pCreate.mockResolvedValue('/path');
     rCreate.mockResolvedValue({
       projectId: '550e8400-e29b-41d4-a716-446655440000',

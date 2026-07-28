@@ -10,8 +10,14 @@ export const MANIFEST_FILE = 'project.json';
 function isValidUtcIso8601(value: string): boolean {
   const parsed = Date.parse(value);
   if (Number.isNaN(parsed)) return false;
-  const reconstructed = new Date(parsed).toISOString();
-  return reconstructed === value;
+  if (!value.endsWith('Z')) return false;
+  const withMs = new Date(parsed).toISOString();
+  if (value === withMs) return true;
+  if (withMs.endsWith('.000Z')) {
+    const withoutMsTs = withMs.slice(0, -5) + 'Z';
+    if (value === withoutMsTs) return true;
+  }
+  return false;
 }
 
 const utcIso8601Schema = z

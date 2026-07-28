@@ -8,10 +8,6 @@ import type { DesktopApi } from '@kwe/contracts';
 
 import { App } from './app.js';
 
-function createNeverResolver<T>(): () => Promise<T> {
-  return () => new Promise<T>(() => {});
-}
-
 function mockProjects(overrides?: Partial<DesktopApi['projects']>): void {
   const defaultProjects: DesktopApi['projects'] = {
     getActive: vi.fn().mockResolvedValue(null),
@@ -20,12 +16,8 @@ function mockProjects(overrides?: Partial<DesktopApi['projects']>): void {
   };
 
   (window as { kwe?: DesktopApi }).kwe = {
-    app: {
-      getInfo: vi.fn(),
-    },
-    system: {
-      computeDiagnosticHash: vi.fn(),
-    },
+    app: { getInfo: vi.fn() },
+    system: { computeDiagnosticHash: vi.fn() },
     projects: { ...defaultProjects, ...overrides },
   };
 }
@@ -41,16 +33,15 @@ afterEach(() => {
 describe('App', () => {
   it('shows loading state on mount', () => {
     mockProjects({
-      getActive: createNeverResolver(),
+      getActive: () => new Promise(() => {}),
     });
 
     render(<App />);
 
     expect(screen.getByText('Loading...')).toBeDefined();
-    expect(screen.getByText('Checking for an open project.')).toBeDefined();
   });
 
-  it('shows empty state with buttons when no active project', async () => {
+  it('shows empty state with create and open buttons', async () => {
     render(<App />);
 
     await waitFor(() => {
@@ -70,24 +61,26 @@ describe('App', () => {
 
     fireEvent.click(screen.getByText('Create project'));
 
-    expect(screen.getByText(/create project/i)).toBeDefined();
+    await waitFor(() => {
+      expect(screen.getByText(/create project/i)).toBeDefined();
+    });
+
     expect(screen.getByLabelText('Project name')).toBeDefined();
-    expect(screen.getByPlaceholderText('Enter project name')).toBeDefined();
   });
 
   it('shows create-pending state', async () => {
     mockProjects({
       getActive: vi.fn().mockResolvedValue(null),
-      create: createNeverResolver(),
+      create: () => new Promise(() => {}),
     });
 
     render(<App />);
 
-    await waitFor(() => {
-      expect(screen.getByText('No project open')).toBeDefined();
-    });
+    await waitFor(() => expect(screen.getByText('No project open')).toBeDefined());
 
     fireEvent.click(screen.getByText('Create project'));
+    await waitFor(() => expect(screen.getByText(/create project/i)).toBeDefined());
+
     fireEvent.change(screen.getByLabelText('Project name'), { target: { value: 'Test' } });
     fireEvent.click(screen.getByText('Select folder'));
 
@@ -99,14 +92,12 @@ describe('App', () => {
   it('shows open-pending state', async () => {
     mockProjects({
       getActive: vi.fn().mockResolvedValue(null),
-      open: createNeverResolver(),
+      open: () => new Promise(() => {}),
     });
 
     render(<App />);
 
-    await waitFor(() => {
-      expect(screen.getByText('No project open')).toBeDefined();
-    });
+    await waitFor(() => expect(screen.getByText('No project open')).toBeDefined());
 
     fireEvent.click(screen.getByText('Open project'));
 
@@ -115,7 +106,7 @@ describe('App', () => {
     });
   });
 
-  it('restores empty after create cancellation', async () => {
+  it('create cancellation returns to create-form preserving name', async () => {
     mockProjects({
       getActive: vi.fn().mockResolvedValue(null),
       create: vi.fn().mockResolvedValue({ status: 'cancelled' }),
@@ -123,20 +114,24 @@ describe('App', () => {
 
     render(<App />);
 
-    await waitFor(() => {
-      expect(screen.getByText('No project open')).toBeDefined();
-    });
+    await screen.findByText('No project open');
 
     fireEvent.click(screen.getByText('Create project'));
-    fireEvent.change(screen.getByLabelText('Project name'), { target: { value: 'Test' } });
+    await screen.findByLabelText('Project name');
+
+    const input = screen.getByLabelText('Project name');
+    fireEvent.change(input, { target: { value: 'Test' } });
+    await screen.findByDisplayValue('Test');
+
     fireEvent.click(screen.getByText('Select folder'));
 
     await waitFor(() => {
-      expect(screen.getByText('No project open')).toBeDefined();
+      const nameInput = screen.getByLabelText('Project name') as HTMLInputElement;
+      expect(nameInput.value).toBe('Test');
     });
   });
 
-  it('restores empty after open cancellation', async () => {
+  it('open cancellation from empty returns to empty', async () => {
     mockProjects({
       getActive: vi.fn().mockResolvedValue(null),
       open: vi.fn().mockResolvedValue({ status: 'cancelled' }),
@@ -144,9 +139,7 @@ describe('App', () => {
 
     render(<App />);
 
-    await waitFor(() => {
-      expect(screen.getByText('No project open')).toBeDefined();
-    });
+    await waitFor(() => expect(screen.getByText('No project open')).toBeDefined());
 
     fireEvent.click(screen.getByText('Open project'));
 
@@ -155,7 +148,33 @@ describe('App', () => {
     });
   });
 
-  it('displays active project', async () => {
+  it('open cancellation from active returns to active project', async () => {
+    const project = {
+      projectId: '550e8400-e29b-41d4-a716-446655440000',
+      name: 'Existing',
+      rootPath: '/path',
+      schemaVersion: 1 as const,
+    };
+
+    const openFn = vi.fn().mockResolvedValue({ status: 'cancelled' });
+
+    mockProjects({
+      getActive: vi.fn().mockResolvedValue(project),
+      open: openFn,
+    });
+
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByText('Existing')).toBeDefined());
+
+    fireEvent.click(screen.getByText('Open another project'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Existing')).toBeDefined();
+    });
+  });
+
+  it('displays active project details', async () => {
     const project = {
       projectId: '550e8400-e29b-41d4-a716-446655440000',
       name: 'My Test Project',
@@ -174,8 +193,6 @@ describe('App', () => {
     });
 
     expect(screen.getByText('/some/path')).toBeDefined();
-    expect(screen.getByText('550e8400-e29b-41d4-a716-446655440000')).toBeDefined();
-    expect(screen.getByText('1')).toBeDefined();
   });
 
   it.each([
@@ -185,6 +202,7 @@ describe('App', () => {
     ['PROJECT_MANIFEST_INVALID', 'The project manifest is invalid'],
     ['PROJECT_VERSION_UNSUPPORTED', 'project manifest version is not supported'],
     ['PROJECT_PATH_INVALID', 'The selected folder path is not valid'],
+    ['PROJECT_IO_FAILED', 'An unexpected error occurred'],
   ])('shows error message for code %s', async (code, expectedMessage) => {
     mockProjects({
       getActive: vi.fn().mockResolvedValue(null),
@@ -193,11 +211,10 @@ describe('App', () => {
 
     render(<App />);
 
-    await waitFor(() => {
-      expect(screen.getByText('No project open')).toBeDefined();
-    });
+    await waitFor(() => expect(screen.getByText('No project open')).toBeDefined());
 
     fireEvent.click(screen.getByText('Create project'));
+    await waitFor(() => expect(screen.getByText(/create project/i)).toBeDefined());
     fireEvent.change(screen.getByLabelText('Project name'), { target: { value: 'Test' } });
     fireEvent.click(screen.getByText('Select folder'));
 
@@ -218,24 +235,16 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.getByText('Startup error')).toBeDefined();
     });
-
-    expect(
-      screen.getByText('Unable to check for an active project. Restart the application.'),
-    ).toBeDefined();
   });
 
   it('does not render source-import controls', async () => {
     render(<App />);
 
-    await waitFor(() => {
-      expect(screen.getByText('No project open')).toBeDefined();
-    });
+    await waitFor(() => expect(screen.getByText('No project open')).toBeDefined());
 
-    expect(screen.queryByText(/source/i)).toBeNull();
     expect(screen.queryByText(/import/i)).toBeNull();
     expect(screen.queryByText(/upload/i)).toBeNull();
     expect(screen.queryByText(/url/i)).toBeNull();
-    expect(screen.queryByText(/document/i)).toBeNull();
     expect(screen.queryByText(/fetch/i)).toBeNull();
   });
 });

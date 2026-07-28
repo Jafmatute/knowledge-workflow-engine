@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import type { ActiveProjectDto, CreateProjectResult, OpenProjectResult } from '@kwe/contracts';
 
@@ -7,8 +7,8 @@ type PageState =
   | { status: 'startup-error'; message: string }
   | { status: 'empty' }
   | { status: 'create-form' }
-  | { status: 'create-pending' }
-  | { status: 'open-pending' }
+  | { status: 'create-pending'; prev: PageState }
+  | { status: 'open-pending'; prev: PageState }
   | { status: 'active'; project: ActiveProjectDto }
   | { status: 'error'; message: string };
 
@@ -41,13 +41,6 @@ function getErrorCode(result: CreateProjectResult | OpenProjectResult): string |
 export function App() {
   const [page, setPage] = useState<PageState>({ status: 'loading' });
   const [projectName, setProjectName] = useState('');
-  const mountedRef = useRef(true);
-
-  useEffect(() => {
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
 
   useEffect(() => {
     let active = true;
@@ -77,51 +70,50 @@ export function App() {
   }, []);
 
   const handleCreateSubmit = useCallback(async () => {
-    setPage({ status: 'create-pending' });
+    setPage((prev) => ({ status: 'create-pending', prev }));
 
     try {
       const result: CreateProjectResult = await window.kwe.projects.create({ name: projectName });
-
-      if (!mountedRef.current) return;
 
       if (result.status === 'created') {
         setPage({ status: 'active', project: result.project });
         setProjectName('');
       } else if (result.status === 'cancelled') {
-        setPage({ status: 'empty' });
-        setProjectName('');
+        setPage({ status: 'create-form' });
       } else {
         const code = getErrorCode(result) ?? 'PROJECT_IO_FAILED';
         setPage({ status: 'error', message: getProjectErrorMessage(code) });
       }
     } catch {
-      if (mountedRef.current) {
-        setPage({ status: 'error', message: 'An unexpected error occurred. Please try again.' });
-      }
+      setPage({ status: 'error', message: 'An unexpected error occurred. Please try again.' });
     }
   }, [projectName]);
 
   const handleOpen = useCallback(async () => {
-    setPage({ status: 'open-pending' });
+    setPage((prev) => ({ status: 'open-pending', prev }));
 
     try {
       const result: OpenProjectResult = await window.kwe.projects.open();
 
-      if (!mountedRef.current) return;
-
       if (result.status === 'opened') {
         setPage({ status: 'active', project: result.project });
       } else if (result.status === 'cancelled') {
-        setPage({ status: 'empty' });
+        setPage((prev) => {
+          if (prev.status === 'open-pending') return prev.prev;
+          return { status: 'empty' };
+        });
       } else {
         const code = getErrorCode(result) ?? 'PROJECT_IO_FAILED';
         setPage({ status: 'error', message: getProjectErrorMessage(code) });
       }
     } catch {
-      if (mountedRef.current) {
-        setPage({ status: 'error', message: 'An unexpected error occurred. Please try again.' });
-      }
+      setPage({ status: 'error', message: 'An unexpected error occurred. Please try again.' });
     }
+  }, []);
+
+  const goToCreateForm = useCallback(() => {
+    setPage({ status: 'create-form' });
+    setProjectName('');
   }, []);
 
   const goToEmpty = useCallback(() => {
@@ -161,11 +153,7 @@ export function App() {
           <h1 id="shell-title">No project open</h1>
           <p>Create a new project or open an existing one to get started.</p>
           <div className="shell__actions">
-            <button
-              type="button"
-              className="shell__action"
-              onClick={() => setPage({ status: 'create-form' })}
-            >
+            <button type="button" className="shell__action" onClick={goToCreateForm}>
               Create project
             </button>
             <button type="button" className="shell__action" onClick={handleOpen}>
@@ -196,7 +184,9 @@ export function App() {
                 type="text"
                 className="shell__input"
                 value={projectName}
-                onChange={(e) => setProjectName(e.target.value)}
+                onChange={(e) => {
+                  setProjectName(e.target.value);
+                }}
                 placeholder="Enter project name"
                 autoFocus
               />
@@ -251,7 +241,7 @@ export function App() {
           <h1 id="shell-title">Error</h1>
           <p className="shell__error-text">{page.message}</p>
           <div className="shell__actions">
-            <button type="button" className="shell__action" onClick={goToEmpty}>
+            <button type="button" className="shell__action" onClick={goToCreateForm}>
               Create project
             </button>
             <button type="button" className="shell__action" onClick={handleOpen}>
@@ -289,7 +279,7 @@ export function App() {
           <button
             type="button"
             className="shell__action shell__action--secondary"
-            onClick={goToEmpty}
+            onClick={goToCreateForm}
           >
             Create project
           </button>

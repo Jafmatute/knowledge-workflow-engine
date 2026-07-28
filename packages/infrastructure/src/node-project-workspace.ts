@@ -1,15 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import {
-  link,
-  lstat,
-  mkdir,
-  open,
-  readFile,
-  realpath,
-  stat,
-  unlink,
-  writeFile,
-} from 'node:fs/promises';
+import { writeFileSync } from 'node:fs';
+import { link, lstat, mkdir, readFile, realpath, stat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import type { ProjectWorkspaceRepository } from '@kwe/application';
@@ -31,11 +22,18 @@ function getManifestPath(rootPath: string): string {
   return join(getKweDir(rootPath), MANIFEST_FILE);
 }
 
+function isEnoent(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException)?.code === 'ENOENT';
+}
+
 async function canonicalDir(rootPath: string): Promise<string> {
   try {
     return await realpath(rootPath);
-  } catch {
-    throw new ProjectWorkspaceError('PROJECT_PATH_INVALID', 'Selected root does not exist');
+  } catch (error: unknown) {
+    if (isEnoent(error)) {
+      throw new ProjectWorkspaceError('PROJECT_PATH_INVALID', 'Selected root does not exist');
+    }
+    throw new ProjectWorkspaceError('PROJECT_IO_FAILED', 'Failed to resolve project root');
   }
 }
 
@@ -43,8 +41,11 @@ async function requireDirectory(dirPath: string): Promise<void> {
   let st;
   try {
     st = await stat(dirPath);
-  } catch {
-    throw new ProjectWorkspaceError('PROJECT_PATH_INVALID', 'Selected path is not a directory');
+  } catch (error: unknown) {
+    if (isEnoent(error)) {
+      throw new ProjectWorkspaceError('PROJECT_PATH_INVALID', 'Selected path does not exist');
+    }
+    throw new ProjectWorkspaceError('PROJECT_IO_FAILED', 'Failed to inspect directory');
   }
   if (!st.isDirectory()) {
     throw new ProjectWorkspaceError('PROJECT_PATH_INVALID', 'Selected path is not a directory');
@@ -55,8 +56,9 @@ async function requireNoSymlink(targetPath: string, label: string): Promise<void
   let st;
   try {
     st = await lstat(targetPath);
-  } catch {
-    return;
+  } catch (error: unknown) {
+    if (isEnoent(error)) return;
+    throw new ProjectWorkspaceError('PROJECT_IO_FAILED', `Failed to inspect ${label}`);
   }
   if (st.isSymbolicLink()) {
     throw new ProjectWorkspaceError('PROJECT_PATH_INVALID', `${label} must not be a symbolic link`);
@@ -70,6 +72,16 @@ function isContained(parent: string, child: string): boolean {
     return false;
   }
   return true;
+}
+
+async function removeTmp(tmpPath: string): Promise<void> {
+  try {
+    await unlink(tmpPath);
+  } catch (error: unknown) {
+    if (!isEnoent(error)) {
+      throw new ProjectWorkspaceError('PROJECT_IO_FAILED', 'Failed to clean up temporary file');
+    }
+  }
 }
 
 export function createNodeProjectWorkspaceRepository(): ProjectWorkspaceRepository {
@@ -120,37 +132,23 @@ export function createNodeProjectWorkspaceRepository(): ProjectWorkspaceReposito
       const tmpPath = join(kweDir, `.tmp.${randomUUID()}`);
 
       try {
-        await writeFile(tmpPath, JSON.stringify(validatedManifest, null, 2) + '\n', {
+        writeFileSync(tmpPath, JSON.stringify(validatedManifest, null, 2) + '\n', {
           encoding: 'utf-8',
           flag: 'wx',
         });
       } catch (error: unknown) {
+        await removeTmp(tmpPath).catch(() => {});
         const nodeErr = error as NodeJS.ErrnoException;
         if (nodeErr?.code === 'EEXIST') {
-          await unlink(tmpPath).catch(() => {});
           throw new ProjectWorkspaceError('PROJECT_IO_FAILED', 'Temporary file already exists');
         }
-        await unlink(tmpPath).catch(() => {});
         throw new ProjectWorkspaceError('PROJECT_IO_FAILED', 'Failed to write temporary file');
-      }
-
-      if (process.platform !== 'win32') {
-        try {
-          const fileHandle = await open(tmpPath, 'r');
-          try {
-            await fileHandle.sync();
-          } finally {
-            await fileHandle.close().catch(() => {});
-          }
-        } catch {
-          // fsync failure is non-fatal for temporary files
-        }
       }
 
       try {
         await link(tmpPath, manifestPath);
       } catch (error: unknown) {
-        await unlink(tmpPath).catch(() => {});
+        await removeTmp(tmpPath).catch(() => {});
         const nodeErr = error as NodeJS.ErrnoException;
         if (nodeErr?.code === 'EEXIST') {
           throw new ProjectWorkspaceError(
@@ -161,7 +159,7 @@ export function createNodeProjectWorkspaceRepository(): ProjectWorkspaceReposito
         throw new ProjectWorkspaceError('PROJECT_IO_FAILED', 'Failed to publish project manifest');
       }
 
-      await unlink(tmpPath).catch(() => {});
+      await removeTmp(tmpPath);
 
       let content: string;
       try {
@@ -221,10 +219,16 @@ export function createNodeProjectWorkspaceRepository(): ProjectWorkspaceReposito
       let kweStat;
       try {
         kweStat = await stat(kweDir);
-      } catch {
+      } catch (error: unknown) {
+        if (isEnoent(error)) {
+          throw new ProjectWorkspaceError(
+            'PROJECT_MANIFEST_NOT_FOUND',
+            'Workspace directory not found',
+          );
+        }
         throw new ProjectWorkspaceError(
-          'PROJECT_MANIFEST_NOT_FOUND',
-          'Workspace directory not found',
+          'PROJECT_IO_FAILED',
+          'Failed to inspect workspace directory',
         );
       }
       if (!kweStat.isDirectory()) {
@@ -237,8 +241,14 @@ export function createNodeProjectWorkspaceRepository(): ProjectWorkspaceReposito
       let manifestStat;
       try {
         manifestStat = await stat(manifestPath);
-      } catch {
-        throw new ProjectWorkspaceError('PROJECT_MANIFEST_NOT_FOUND', 'Project manifest not found');
+      } catch (error: unknown) {
+        if (isEnoent(error)) {
+          throw new ProjectWorkspaceError(
+            'PROJECT_MANIFEST_NOT_FOUND',
+            'Project manifest not found',
+          );
+        }
+        throw new ProjectWorkspaceError('PROJECT_IO_FAILED', 'Failed to inspect manifest');
       }
       if (!manifestStat.isFile()) {
         throw new ProjectWorkspaceError(
@@ -246,7 +256,6 @@ export function createNodeProjectWorkspaceRepository(): ProjectWorkspaceReposito
           'Manifest is not a regular file',
         );
       }
-
       if (manifestStat.size > PROJECT_MANIFEST_MAX_BYTES) {
         throw new ProjectWorkspaceError(
           'PROJECT_MANIFEST_INVALID',
@@ -257,7 +266,13 @@ export function createNodeProjectWorkspaceRepository(): ProjectWorkspaceReposito
       let content: string;
       try {
         content = await readFile(manifestPath, { encoding: 'utf-8' });
-      } catch {
+      } catch (error: unknown) {
+        if (isEnoent(error)) {
+          throw new ProjectWorkspaceError(
+            'PROJECT_MANIFEST_NOT_FOUND',
+            'Project manifest not found',
+          );
+        }
         throw new ProjectWorkspaceError('PROJECT_IO_FAILED', 'Failed to read manifest');
       }
 
@@ -292,7 +307,6 @@ export function createNodeProjectWorkspaceRepository(): ProjectWorkspaceReposito
       }
 
       const parseResult = projectManifestSchema.safeParse(parsed);
-
       if (!parseResult.success) {
         throw new ProjectWorkspaceError('PROJECT_MANIFEST_INVALID', 'Manifest validation failed');
       }
