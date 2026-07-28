@@ -1,28 +1,34 @@
 import { createProjectUseCases, type ProjectUseCases } from '@kwe/application';
-import type { ActiveProject } from '@kwe/domain';
 import {
+  activeProjectDtoSchema,
   createProjectInputSchema,
-  type CreateProjectResult,
-  type GetActiveProjectResult,
-  type OpenProjectResult,
+  createProjectResultSchema,
+  openProjectResultSchema,
+} from '@kwe/schemas';
+import type {
+  ActiveProjectDto,
+  CreateProjectResult,
+  GetActiveProjectResult,
+  OpenProjectResult,
 } from '@kwe/schemas';
 
 import type { DirectoryDialog } from '@kwe/application';
 
 export { createElectronDirectoryDialog } from './project-dialog.js';
 
-let activeProject: ActiveProject | null = null;
+let activeProject: ActiveProjectDto | null = null;
 
-export function getActiveProject(): ActiveProject | null {
+export function getActiveProject(): ActiveProjectDto | null {
   return activeProject;
 }
 
-function setActiveProject(project: ActiveProject): void {
+function setActiveProject(project: ActiveProjectDto): void {
   activeProject = project;
 }
 
-export function clearActiveProject(): void {
-  activeProject = null;
+function validateActiveProject(raw: unknown): ActiveProjectDto | null {
+  const parsed = activeProjectDtoSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
 }
 
 export function createProjectHandlers(
@@ -34,18 +40,26 @@ export function createProjectHandlers(
   return {
     async create(input: unknown): Promise<CreateProjectResult> {
       const result = await useCases.create(input);
-      if (result.status === 'created') {
-        setActiveProject(result.project);
+      const validated = createProjectResultSchema.parse(result);
+      if (validated.status === 'created') {
+        const project = validateActiveProject(validated.project);
+        if (project !== null) {
+          setActiveProject(project);
+        }
       }
-      return result;
+      return validated;
     },
 
     async open(): Promise<OpenProjectResult> {
       const result = await useCases.open();
-      if (result.status === 'opened') {
-        setActiveProject(result.project);
+      const validated = openProjectResultSchema.parse(result);
+      if (validated.status === 'opened') {
+        const project = validateActiveProject(validated.project);
+        if (project !== null) {
+          setActiveProject(project);
+        }
       }
-      return result;
+      return validated;
     },
   };
 }

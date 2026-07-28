@@ -1,9 +1,20 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, open, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
-import { relative, resolve, join } from 'node:path';
+import {
+  link,
+  lstat,
+  mkdir,
+  open,
+  readFile,
+  realpath,
+  stat,
+  unlink,
+  writeFile,
+} from 'node:fs/promises';
+import { join } from 'node:path';
 
-import type { ActiveProject } from '@kwe/domain';
 import type { ProjectWorkspaceRepository } from '@kwe/application';
+import { ProjectWorkspaceError } from '@kwe/application';
+import type { ActiveProjectDto } from '@kwe/schemas';
 import {
   PROJECT_MANIFEST_MAX_BYTES,
   PROJECT_MANIFEST_SCHEMA_VERSION,
@@ -11,34 +22,6 @@ import {
   MANIFEST_FILE,
   projectManifestSchema,
 } from '@kwe/schemas';
-
-type ProjectErrorCode =
-  | 'PROJECT_ALREADY_EXISTS'
-  | 'PROJECT_MANIFEST_NOT_FOUND'
-  | 'PROJECT_MANIFEST_INVALID'
-  | 'PROJECT_VERSION_UNSUPPORTED'
-  | 'PROJECT_PATH_INVALID'
-  | 'PROJECT_IO_FAILED';
-
-class ProjectWorkspaceError extends Error {
-  readonly code: ProjectErrorCode;
-  readonly operation: string;
-
-  constructor(code: ProjectErrorCode, message: string, operation: string) {
-    super(message);
-    this.name = 'ProjectWorkspaceError';
-    this.code = code;
-    this.operation = operation;
-  }
-}
-
-function assertProjectError(error: unknown): ProjectWorkspaceError {
-  if (error instanceof ProjectWorkspaceError) return error;
-
-  const nodeError = error as { code?: string; message?: string };
-  const msg = nodeError?.message ?? 'Unknown filesystem error';
-  return new ProjectWorkspaceError('PROJECT_IO_FAILED', msg, 'filesystem');
-}
 
 function getKweDir(rootPath: string): string {
   return join(rootPath, WORKSPACE_DIR);
@@ -48,93 +31,70 @@ function getManifestPath(rootPath: string): string {
   return join(getKweDir(rootPath), MANIFEST_FILE);
 }
 
-async function ensureDirectory(dirPath: string): Promise<void> {
+async function canonicalDir(rootPath: string): Promise<string> {
   try {
-    await mkdir(dirPath, { recursive: true });
-  } catch (error) {
-    throw assertProjectError(error);
+    return await realpath(rootPath);
+  } catch {
+    throw new ProjectWorkspaceError('PROJECT_PATH_INVALID', 'Selected root does not exist');
   }
 }
 
-function isSubPath(parent: string, child: string): boolean {
-  const rel = relative(parent, child);
-  return !rel.startsWith('..') && !relative(parent, child).startsWith('..');
-}
-
-function serializeManifest(data: Record<string, unknown>): string {
-  return JSON.stringify(data, null, 2) + '\n';
-}
-
-async function atomicWrite(targetPath: string, content: string): Promise<void> {
-  const tmpPath = `${targetPath}.tmp.${randomUUID()}`;
-
+async function requireDirectory(dirPath: string): Promise<void> {
+  let st;
   try {
-    await writeFile(tmpPath, content, { encoding: 'utf-8' });
-
-    if (process.platform !== 'win32') {
-      const fileHandle = await open(tmpPath, 'r');
-      try {
-        await fileHandle.sync();
-      } finally {
-        await fileHandle.close();
-      }
-    }
-
-    await rename(tmpPath, targetPath);
-  } catch (error) {
-    await unlink(tmpPath).catch(() => {});
-    throw assertProjectError(error);
+    st = await stat(dirPath);
+  } catch {
+    throw new ProjectWorkspaceError('PROJECT_PATH_INVALID', 'Selected path is not a directory');
   }
+  if (!st.isDirectory()) {
+    throw new ProjectWorkspaceError('PROJECT_PATH_INVALID', 'Selected path is not a directory');
+  }
+}
+
+async function requireNoSymlink(targetPath: string, label: string): Promise<void> {
+  let st;
+  try {
+    st = await lstat(targetPath);
+  } catch {
+    return;
+  }
+  if (st.isSymbolicLink()) {
+    throw new ProjectWorkspaceError('PROJECT_PATH_INVALID', `${label} must not be a symbolic link`);
+  }
+}
+
+function isContained(parent: string, child: string): boolean {
+  const parentNorm = parent.replace(/\\/g, '/').replace(/\/$/, '');
+  const childNorm = child.replace(/\\/g, '/');
+  if (!childNorm.startsWith(parentNorm + '/') && childNorm !== parentNorm) {
+    return false;
+  }
+  return true;
 }
 
 export function createNodeProjectWorkspaceRepository(): ProjectWorkspaceRepository {
   return {
-    async create(name: string, rootPath: string): Promise<ActiveProject> {
-      const resolvedRoot = resolve(rootPath);
-      const kweDir = getKweDir(resolvedRoot);
-      const manifestPath = getManifestPath(resolvedRoot);
+    async create(name: string, rootPath: string): Promise<ActiveProjectDto> {
+      const canonicalRoot = await canonicalDir(rootPath);
+      await requireDirectory(canonicalRoot);
 
-      let rootStat;
-      try {
-        rootStat = await stat(resolvedRoot);
-      } catch {
+      const kweDir = getKweDir(canonicalRoot);
+      const manifestPath = getManifestPath(canonicalRoot);
+
+      await requireNoSymlink(kweDir, '.kwe');
+      await requireNoSymlink(manifestPath, 'project.json');
+
+      const canonicalKwe = join(canonicalRoot, WORKSPACE_DIR);
+      const canonicalManifest = join(canonicalRoot, WORKSPACE_DIR, MANIFEST_FILE);
+
+      if (
+        !isContained(canonicalRoot, canonicalKwe) ||
+        !isContained(canonicalRoot, canonicalManifest)
+      ) {
         throw new ProjectWorkspaceError(
           'PROJECT_PATH_INVALID',
-          'Selected directory does not exist',
-          'create',
+          'Workspace paths must resolve inside the project root',
         );
-      }
-
-      if (!rootStat.isDirectory()) {
-        throw new ProjectWorkspaceError(
-          'PROJECT_PATH_INVALID',
-          'Selected path is not a directory',
-          'create',
-        );
-      }
-
-      if (!isSubPath(resolvedRoot, kweDir)) {
-        throw new ProjectWorkspaceError(
-          'PROJECT_PATH_INVALID',
-          'Manifest directory must be inside the project root',
-          'create',
-        );
-      }
-
-      try {
-        const existingStat = await stat(manifestPath);
-        if (existingStat.isFile() || existingStat.isDirectory()) {
-          throw new ProjectWorkspaceError(
-            'PROJECT_ALREADY_EXISTS',
-            'A project already exists at this location',
-            'create',
-          );
-        }
-      } catch (error) {
-        const nodeErr = error as { code?: string };
-        if (nodeErr?.code !== 'ENOENT') {
-          if (error instanceof ProjectWorkspaceError) throw error;
-        }
       }
 
       const now = new Date().toISOString();
@@ -147,38 +107,114 @@ export function createNodeProjectWorkspaceRepository(): ProjectWorkspaceReposito
       };
 
       const validatedManifest = projectManifestSchema.parse(manifestData);
-      await ensureDirectory(kweDir);
-      await atomicWrite(manifestPath, serializeManifest(validatedManifest));
+
+      try {
+        await mkdir(kweDir, { recursive: true });
+      } catch {
+        throw new ProjectWorkspaceError(
+          'PROJECT_IO_FAILED',
+          'Failed to create workspace directory',
+        );
+      }
+
+      const tmpPath = join(kweDir, `.tmp.${randomUUID()}`);
+
+      try {
+        await writeFile(tmpPath, JSON.stringify(validatedManifest, null, 2) + '\n', {
+          encoding: 'utf-8',
+          flag: 'wx',
+        });
+      } catch (error: unknown) {
+        const nodeErr = error as NodeJS.ErrnoException;
+        if (nodeErr?.code === 'EEXIST') {
+          await unlink(tmpPath).catch(() => {});
+          throw new ProjectWorkspaceError('PROJECT_IO_FAILED', 'Temporary file already exists');
+        }
+        await unlink(tmpPath).catch(() => {});
+        throw new ProjectWorkspaceError('PROJECT_IO_FAILED', 'Failed to write temporary file');
+      }
+
+      if (process.platform !== 'win32') {
+        try {
+          const fileHandle = await open(tmpPath, 'r');
+          try {
+            await fileHandle.sync();
+          } finally {
+            await fileHandle.close().catch(() => {});
+          }
+        } catch {
+          // fsync failure is non-fatal for temporary files
+        }
+      }
+
+      try {
+        await link(tmpPath, manifestPath);
+      } catch (error: unknown) {
+        await unlink(tmpPath).catch(() => {});
+        const nodeErr = error as NodeJS.ErrnoException;
+        if (nodeErr?.code === 'EEXIST') {
+          throw new ProjectWorkspaceError(
+            'PROJECT_ALREADY_EXISTS',
+            'A project already exists at this location',
+          );
+        }
+        throw new ProjectWorkspaceError('PROJECT_IO_FAILED', 'Failed to publish project manifest');
+      }
+
+      await unlink(tmpPath).catch(() => {});
+
+      let content: string;
+      try {
+        content = await readFile(manifestPath, { encoding: 'utf-8' });
+      } catch {
+        throw new ProjectWorkspaceError('PROJECT_IO_FAILED', 'Failed to read published manifest');
+      }
+
+      if (Buffer.byteLength(content, 'utf-8') > PROJECT_MANIFEST_MAX_BYTES) {
+        throw new ProjectWorkspaceError(
+          'PROJECT_IO_FAILED',
+          'Published manifest exceeds size limit',
+        );
+      }
+
+      let verified: ReturnType<typeof projectManifestSchema.parse>;
+      try {
+        verified = projectManifestSchema.parse(JSON.parse(content));
+      } catch {
+        throw new ProjectWorkspaceError(
+          'PROJECT_IO_FAILED',
+          'Published manifest failed validation',
+        );
+      }
 
       return {
-        projectId: validatedManifest.projectId,
-        name: validatedManifest.name,
-        rootPath: resolvedRoot,
+        projectId: verified.projectId,
+        name: verified.name,
+        rootPath: canonicalRoot,
         schemaVersion: PROJECT_MANIFEST_SCHEMA_VERSION,
       };
     },
 
-    async open(rootPath: string): Promise<ActiveProject> {
-      const resolvedRoot = resolve(rootPath);
-      const kweDir = getKweDir(resolvedRoot);
-      const manifestPath = getManifestPath(resolvedRoot);
+    async open(rootPath: string): Promise<ActiveProjectDto> {
+      const canonicalRoot = await canonicalDir(rootPath);
+      await requireDirectory(canonicalRoot);
 
-      let rootStat;
-      try {
-        rootStat = await stat(resolvedRoot);
-      } catch {
+      const kweDir = getKweDir(canonicalRoot);
+      const manifestPath = getManifestPath(canonicalRoot);
+
+      await requireNoSymlink(kweDir, '.kwe');
+      await requireNoSymlink(manifestPath, 'project.json');
+
+      const canonicalKwe = join(canonicalRoot, WORKSPACE_DIR);
+      const canonicalManifest = join(canonicalRoot, WORKSPACE_DIR, MANIFEST_FILE);
+
+      if (
+        !isContained(canonicalRoot, canonicalKwe) ||
+        !isContained(canonicalRoot, canonicalManifest)
+      ) {
         throw new ProjectWorkspaceError(
           'PROJECT_PATH_INVALID',
-          'Selected directory does not exist',
-          'open',
-        );
-      }
-
-      if (!rootStat.isDirectory()) {
-        throw new ProjectWorkspaceError(
-          'PROJECT_PATH_INVALID',
-          'Selected path is not a directory',
-          'open',
+          'Workspace paths must resolve inside the project root',
         );
       }
 
@@ -188,16 +224,13 @@ export function createNodeProjectWorkspaceRepository(): ProjectWorkspaceReposito
       } catch {
         throw new ProjectWorkspaceError(
           'PROJECT_MANIFEST_NOT_FOUND',
-          'Workspace directory .kwe not found',
-          'open',
+          'Workspace directory not found',
         );
       }
-
       if (!kweStat.isDirectory()) {
         throw new ProjectWorkspaceError(
           'PROJECT_MANIFEST_NOT_FOUND',
-          'Workspace directory .kwe is not a directory',
-          'open',
+          'Workspace path is not a directory',
         );
       }
 
@@ -205,70 +238,69 @@ export function createNodeProjectWorkspaceRepository(): ProjectWorkspaceReposito
       try {
         manifestStat = await stat(manifestPath);
       } catch {
-        throw new ProjectWorkspaceError(
-          'PROJECT_MANIFEST_NOT_FOUND',
-          'Project manifest not found',
-          'open',
-        );
+        throw new ProjectWorkspaceError('PROJECT_MANIFEST_NOT_FOUND', 'Project manifest not found');
       }
-
       if (!manifestStat.isFile()) {
         throw new ProjectWorkspaceError(
           'PROJECT_MANIFEST_INVALID',
-          'Manifest path is not a regular file',
-          'open',
+          'Manifest is not a regular file',
         );
       }
 
       if (manifestStat.size > PROJECT_MANIFEST_MAX_BYTES) {
         throw new ProjectWorkspaceError(
           'PROJECT_MANIFEST_INVALID',
-          'Manifest file exceeds maximum size',
-          'open',
+          'Manifest exceeds maximum size',
         );
       }
 
       let content: string;
       try {
         content = await readFile(manifestPath, { encoding: 'utf-8' });
-      } catch (error) {
-        throw assertProjectError(error);
+      } catch {
+        throw new ProjectWorkspaceError('PROJECT_IO_FAILED', 'Failed to read manifest');
       }
 
       let parsed: unknown;
       try {
         parsed = JSON.parse(content);
       } catch {
+        throw new ProjectWorkspaceError('PROJECT_MANIFEST_INVALID', 'Manifest is not valid JSON');
+      }
+
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
         throw new ProjectWorkspaceError(
           'PROJECT_MANIFEST_INVALID',
-          'Manifest is not valid JSON',
-          'open',
+          'Manifest must be a plain object',
+        );
+      }
+
+      const raw = parsed as Record<string, unknown>;
+
+      if (
+        raw.schemaVersion !== undefined &&
+        raw.schemaVersion !== PROJECT_MANIFEST_SCHEMA_VERSION
+      ) {
+        const versionStr =
+          typeof raw.schemaVersion === 'string' || typeof raw.schemaVersion === 'number'
+            ? String(raw.schemaVersion)
+            : 'unknown';
+        throw new ProjectWorkspaceError(
+          'PROJECT_VERSION_UNSUPPORTED',
+          `Manifest schema version ${versionStr} is not supported`,
         );
       }
 
       const parseResult = projectManifestSchema.safeParse(parsed);
 
       if (!parseResult.success) {
-        const firstIssue = parseResult.error.issues[0];
-        throw new ProjectWorkspaceError(
-          'PROJECT_MANIFEST_INVALID',
-          firstIssue?.message ?? 'Manifest validation failed',
-          'open',
-        );
-      }
-
-      if (!isSubPath(resolvedRoot, manifestPath)) {
-        throw new ProjectWorkspaceError(
-          'PROJECT_PATH_INVALID',
-          'Manifest path must resolve inside the project root',
-          'open',
-        );
+        throw new ProjectWorkspaceError('PROJECT_MANIFEST_INVALID', 'Manifest validation failed');
       }
 
       return {
         projectId: parseResult.data.projectId,
         name: parseResult.data.name,
-        rootPath: resolvedRoot,
+        rootPath: canonicalRoot,
         schemaVersion: PROJECT_MANIFEST_SCHEMA_VERSION,
       };
     },

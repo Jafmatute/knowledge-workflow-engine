@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain } from 'electron';
 
 import { IPC_CHANNELS } from '@kwe/contracts';
 import { createNodeProjectWorkspaceRepository } from '@kwe/infrastructure';
+import { activeProjectDtoSchema } from '@kwe/schemas';
 
 import { createGetAppInfoHandler } from './app-info-handler.js';
 import { getNavigationMode, isTrustedIpcSender } from './navigation-policy.js';
@@ -58,6 +59,8 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
   ipcMain.handle(IPC_CHANNELS.projectGetActive, (event) => {
     assertTrustedSender(event);
-    return getActiveProject();
+    const active = getActiveProject();
+    const parsed = activeProjectDtoSchema.safeParse(active);
+    return parsed.success ? parsed.data : null;
   });
 }

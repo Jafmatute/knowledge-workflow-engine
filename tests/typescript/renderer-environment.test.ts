@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  activeProjectSchema,
+  activeProjectDtoSchema,
   createProjectInputSchema,
   createProjectResultSchema,
   getActiveProjectResultSchema,
@@ -21,7 +21,7 @@ describe('renderer environment types', () => {
   it('supports active project and null', () => {
     expect(getActiveProjectResultSchema.parse(null)).toBeNull();
     expect(
-      activeProjectSchema.parse({
+      activeProjectDtoSchema.parse({
         projectId: '550e8400-e29b-41d4-a716-446655440000',
         name: 'Test',
         rootPath: '/tmp/test',

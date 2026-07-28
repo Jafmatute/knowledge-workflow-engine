@@ -1,4 +1,5 @@
 import type {
+  ActiveProjectDto,
   CreateProjectInput,
   CreateProjectResult,
   GetActiveProjectResult,
@@ -26,3 +27,11 @@ export interface DesktopApi {
     getActive(): Promise<GetActiveProjectResult>;
   };
 }
+
+export type {
+  ActiveProjectDto,
+  CreateProjectInput,
+  CreateProjectResult,
+  OpenProjectResult,
+  GetActiveProjectResult,
+};

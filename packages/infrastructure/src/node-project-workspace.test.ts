@@ -1,30 +1,35 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, realpath, writeFile } from 'node:fs/promises';
+import { rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { existsSync } from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { createNodeProjectWorkspaceRepository } from './node-project-workspace.js';
+import { ProjectWorkspaceError } from '@kwe/application';
 
 describe('Node project workspace repository', () => {
-  const tmpBase = join(process.cwd(), 'tmp-test-workspace');
+  let tmpBase: string;
 
   beforeEach(async () => {
-    await mkdir(tmpBase, { recursive: true });
+    tmpBase = await mkdtemp(join(tmpdir(), 'kwe-test-'));
   });
 
-  afterEach(async () => {
-    await rm(tmpBase).catch(() => {});
+  afterEach(() => {
+    rmSync(tmpBase, { recursive: true, force: true });
   });
 
   const repo = createNodeProjectWorkspaceRepository();
 
-  it('creates .kwe/project.json with valid content', async () => {
+  it('creates .kwe/project.json with valid content, ends with newline', async () => {
     const project = await repo.create('Test Project', tmpBase);
 
     expect(project.name).toBe('Test Project');
-    expect(project.rootPath).toBe(tmpBase);
     expect(project.schemaVersion).toBe(1);
+
+    const canonical = await realpath(tmpBase);
+    expect(project.rootPath).toBe(canonical);
 
     const manifestPath = join(tmpBase, '.kwe', 'project.json');
     const content = await readFile(manifestPath, 'utf-8');
@@ -46,10 +51,12 @@ describe('Node project workspace repository', () => {
     expect(content).not.toContain('rootPath');
   });
 
-  it('rejects creating over an existing project', async () => {
+  it('rejects creating over an existing project (PROJECT_ALREADY_EXISTS)', async () => {
     await repo.create('First', tmpBase);
 
-    await expect(repo.create('Second', tmpBase)).rejects.toThrow('already exists');
+    const err = await repo.create('Second', tmpBase).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ProjectWorkspaceError);
+    expect((err as ProjectWorkspaceError).code).toBe('PROJECT_ALREADY_EXISTS');
   });
 
   it('opens a valid project', async () => {
@@ -58,21 +65,27 @@ describe('Node project workspace repository', () => {
 
     expect(opened.projectId).toBe(created.projectId);
     expect(opened.name).toBe('Test Project');
-    expect(opened.rootPath).toBe(tmpBase);
+
+    const canonical = await realpath(tmpBase);
+    expect(opened.rootPath).toBe(canonical);
   });
 
-  it('rejects opening a directory without .kwe', async () => {
-    await expect(repo.open(tmpBase)).rejects.toThrow('not found');
+  it('rejects opening without .kwe (PROJECT_MANIFEST_NOT_FOUND)', async () => {
+    const err = await repo.open(tmpBase).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ProjectWorkspaceError);
+    expect((err as ProjectWorkspaceError).code).toBe('PROJECT_MANIFEST_NOT_FOUND');
   });
 
-  it('rejects opening a directory with malformed JSON manifest', async () => {
+  it('rejects malformed JSON manifest (PROJECT_MANIFEST_INVALID)', async () => {
     await mkdir(join(tmpBase, '.kwe'), { recursive: true });
     await writeFile(join(tmpBase, '.kwe', 'project.json'), '{ invalid json }', 'utf-8');
 
-    await expect(repo.open(tmpBase)).rejects.toThrow('not valid JSON');
+    const err = await repo.open(tmpBase).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ProjectWorkspaceError);
+    expect((err as ProjectWorkspaceError).code).toBe('PROJECT_MANIFEST_INVALID');
   });
 
-  it('rejects opening with unknown manifest fields', async () => {
+  it('rejects unknown manifest fields (PROJECT_MANIFEST_INVALID)', async () => {
     await mkdir(join(tmpBase, '.kwe'), { recursive: true });
     await writeFile(
       join(tmpBase, '.kwe', 'project.json'),
@@ -87,10 +100,12 @@ describe('Node project workspace repository', () => {
       'utf-8',
     );
 
-    await expect(repo.open(tmpBase)).rejects.toThrow('Unrecognized key');
+    const err = await repo.open(tmpBase).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ProjectWorkspaceError);
+    expect((err as ProjectWorkspaceError).code).toBe('PROJECT_MANIFEST_INVALID');
   });
 
-  it('rejects unsupported schema version', async () => {
+  it('rejects unsupported schema version (PROJECT_VERSION_UNSUPPORTED)', async () => {
     await mkdir(join(tmpBase, '.kwe'), { recursive: true });
     await writeFile(
       join(tmpBase, '.kwe', 'project.json'),
@@ -104,26 +119,34 @@ describe('Node project workspace repository', () => {
       'utf-8',
     );
 
-    await expect(repo.open(tmpBase)).rejects.toThrow();
+    const err = await repo.open(tmpBase).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ProjectWorkspaceError);
+    expect((err as ProjectWorkspaceError).code).toBe('PROJECT_VERSION_UNSUPPORTED');
   });
 
-  it('rejects oversized manifest', async () => {
+  it('rejects oversized manifest (PROJECT_MANIFEST_INVALID)', async () => {
     await mkdir(join(tmpBase, '.kwe'), { recursive: true });
     await writeFile(join(tmpBase, '.kwe', 'project.json'), 'x'.repeat(65_537), 'utf-8');
 
-    await expect(repo.open(tmpBase)).rejects.toThrow('exceeds maximum size');
+    const err = await repo.open(tmpBase).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ProjectWorkspaceError);
+    expect((err as ProjectWorkspaceError).code).toBe('PROJECT_MANIFEST_INVALID');
   });
 
-  it('rejects non-file manifest path', async () => {
+  it('rejects non-file manifest path (PROJECT_MANIFEST_INVALID)', async () => {
     await mkdir(join(tmpBase, '.kwe', 'project.json'), { recursive: true });
 
-    await expect(repo.open(tmpBase)).rejects.toThrow();
+    const err = await repo.open(tmpBase).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ProjectWorkspaceError);
+    expect((err as ProjectWorkspaceError).code).toBe('PROJECT_MANIFEST_INVALID');
   });
 
-  it('rejects non-existent root directory', async () => {
+  it('rejects non-existent root directory (PROJECT_PATH_INVALID)', async () => {
     const missing = join(tmpBase, 'does-not-exist');
 
-    await expect(repo.create('Test', missing)).rejects.toThrow('does not exist');
+    const err = await repo.create('Test', missing).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ProjectWorkspaceError);
+    expect((err as ProjectWorkspaceError).code).toBe('PROJECT_PATH_INVALID');
   });
 
   it('does not delete unrelated files', async () => {
@@ -134,9 +157,33 @@ describe('Node project workspace repository', () => {
 
     expect(existsSync(unrelatedPath)).toBe(true);
   });
-});
 
-async function rm(dir: string): Promise<void> {
-  const { rmSync } = await import('node:fs');
-  rmSync(dir, { recursive: true, force: true });
-}
+  it('leaves no .tmp.* files after create', async () => {
+    await repo.create('Test Project', tmpBase);
+
+    const kweContents = await readdir(join(tmpBase, '.kwe'));
+    const tmpFiles = kweContents.filter((f: string) => f.startsWith('.tmp.'));
+    expect(tmpFiles).toHaveLength(0);
+  });
+
+  it('rejects symlink root directory when platform supports it', async () => {
+    const realDir = join(tmpBase, 'realdir');
+    const linkDir = join(tmpBase, 'linkdir');
+    await mkdir(realDir);
+
+    let symlink: typeof import('node:fs/promises').symlink;
+    try {
+      symlink = (await import('node:fs/promises')).symlink;
+      await symlink(realDir, linkDir, 'dir');
+    } catch {
+      // Platform does not support unprivileged symlinks — skip
+      return;
+    }
+
+    // realpath resolves the symlink, but requireNoSymlink checks .kwe — pass a
+    // path that resolves to a real directory to avoid PROJECT_PATH_INVALID first
+    const err = await repo.create('Test', linkDir).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ProjectWorkspaceError);
+    expect((err as ProjectWorkspaceError).code).toBe('PROJECT_PATH_INVALID');
+  });
+});

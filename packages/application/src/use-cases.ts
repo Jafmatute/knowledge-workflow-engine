@@ -5,6 +5,14 @@ import {
 } from '@kwe/schemas';
 
 import type { DirectoryDialog, ProjectWorkspaceRepository } from './ports.js';
+import { isProjectWorkspaceError } from './ports.js';
+
+function mapError(error: unknown): CreateProjectResult | OpenProjectResult {
+  if (isProjectWorkspaceError(error)) {
+    return { status: 'failed', error: { code: error.code } };
+  }
+  return { status: 'failed', error: { code: 'PROJECT_IO_FAILED' } };
+}
 
 export function createCreateProjectUseCase(
   directoryDialog: DirectoryDialog,
@@ -14,20 +22,21 @@ export function createCreateProjectUseCase(
     const parsed = createProjectInputSchema.safeParse(input);
 
     if (!parsed.success) {
-      const firstIssue = parsed.error.issues[0];
-      throw Object.assign(new Error(firstIssue?.message ?? 'Invalid project name'), {
-        code: 'PROJECT_NAME_INVALID' satisfies string,
-      });
+      return { status: 'failed', error: { code: 'PROJECT_NAME_INVALID' } };
     }
 
-    const rootPath = await directoryDialog.pickDirectory();
+    const rootPath = await directoryDialog.pickCreateDirectory();
 
     if (rootPath === null) {
       return { status: 'cancelled' };
     }
 
-    const project = await workspaceRepo.create(parsed.data.name, rootPath);
-    return { status: 'created', project };
+    try {
+      const project = await workspaceRepo.create(parsed.data.name, rootPath);
+      return { status: 'created', project };
+    } catch (error: unknown) {
+      return mapError(error) as CreateProjectResult;
+    }
   };
 }
 
@@ -36,14 +45,18 @@ export function createOpenProjectUseCase(
   workspaceRepo: ProjectWorkspaceRepository,
 ) {
   return async (): Promise<OpenProjectResult> => {
-    const rootPath = await directoryDialog.pickDirectory();
+    const rootPath = await directoryDialog.pickOpenDirectory();
 
     if (rootPath === null) {
       return { status: 'cancelled' };
     }
 
-    const project = await workspaceRepo.open(rootPath);
-    return { status: 'opened', project };
+    try {
+      const project = await workspaceRepo.open(rootPath);
+      return { status: 'opened', project };
+    } catch (error: unknown) {
+      return mapError(error) as OpenProjectResult;
+    }
   };
 }
 
@@ -58,6 +71,5 @@ export function createProjectUseCases(
 ): ProjectUseCases {
   const create = createCreateProjectUseCase(directoryDialog, workspaceRepo);
   const open = createOpenProjectUseCase(directoryDialog, workspaceRepo);
-
   return { create, open };
 }

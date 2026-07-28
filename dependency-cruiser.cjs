@@ -12,7 +12,7 @@ module.exports = {
       name: 'domain-must-remain-independent',
       comment: 'Domain source cannot depend on another workspace package or desktop code.',
       severity: 'error',
-      from: { path: '(^|/)packages/domain/src/', pathNot: '\\.(test|spec)\\.ts$' },
+      from: { path: '(^|/)packages/domain/src/', pathNot: '\\.(test|spec)\\.(ts|tsx)$' },
       to: {
         path: '(^|/)(packages/(application|contracts|infrastructure|workflows|schemas|test-support)/src|apps/)',
       },
@@ -21,7 +21,7 @@ module.exports = {
       name: 'domain-cannot-use-external-runtime-libraries',
       comment: 'Domain source cannot depend on npm packages or Node runtime modules.',
       severity: 'error',
-      from: { path: '(^|/)packages/domain/src/', pathNot: '\\.(test|spec)\\.ts$' },
+      from: { path: '(^|/)packages/domain/src/', pathNot: '\\.(test|spec)\\.(ts|tsx)$' },
       to: { dependencyTypes: ['core', 'npm'] },
     },
     {
@@ -29,21 +29,21 @@ module.exports = {
       comment:
         'Application source depends on domain and contracts, never adapters or desktop code.',
       severity: 'error',
-      from: { path: '(^|/)packages/application/src/', pathNot: '\\.(test|spec)\\.ts$' },
+      from: { path: '(^|/)packages/application/src/', pathNot: '\\.(test|spec)\\.(ts|tsx)$' },
       to: { path: '(^|/)(packages/infrastructure/src|apps/)' },
     },
     {
       name: 'contracts-cannot-import-infrastructure-or-desktop',
       comment: 'Contracts remain independent from infrastructure implementations and desktop code.',
       severity: 'error',
-      from: { path: '(^|/)packages/contracts/src/', pathNot: '\\.(test|spec)\\.ts$' },
+      from: { path: '(^|/)packages/contracts/src/', pathNot: '\\.(test|spec)\\.(ts|tsx)$' },
       to: { path: '(^|/)(packages/infrastructure/src|apps/)' },
     },
     {
       name: 'workflows-cannot-import-infrastructure-or-desktop',
       comment: 'Workflows cannot depend on provider adapters, renderers, or desktop code.',
       severity: 'error',
-      from: { path: '(^|/)packages/workflows/src/', pathNot: '\\.(test|spec)\\.ts$' },
+      from: { path: '(^|/)packages/workflows/src/', pathNot: '\\.(test|spec)\\.(ts|tsx)$' },
       to: { path: '(^|/)(packages/infrastructure/src|apps/)' },
     },
     {
@@ -52,7 +52,7 @@ module.exports = {
       severity: 'error',
       from: {
         path: '(^|/)packages/[^/]+/src/',
-        pathNot: '\\.(test|spec)\\.ts$',
+        pathNot: '\\.(test|spec)\\.(ts|tsx)$',
       },
       to: { path: '(^|/)packages/test-support/src/' },
     },
@@ -60,14 +60,14 @@ module.exports = {
       name: 'desktop-renderer-cannot-import-electron',
       comment: 'The renderer cannot access Electron directly.',
       severity: 'error',
-      from: { path: '(^|/)apps/desktop/src/renderer/', pathNot: '\\.(test|spec)\\.ts$' },
+      from: { path: '(^|/)apps/desktop/src/renderer/', pathNot: '\\.(test|spec)\\.(ts|tsx)$' },
       to: { path: '(^|/)node_modules/electron/' },
     },
     {
       name: 'desktop-renderer-cannot-import-unapproved-runtime-package',
       comment: 'The renderer only permits React and React DOM runtime packages.',
       severity: 'error',
-      from: { path: '(^|/)apps/desktop/src/renderer/', pathNot: '\\.(test|spec)\\.ts$' },
+      from: { path: '(^|/)apps/desktop/src/renderer/', pathNot: '\\.(test|spec)\\.(ts|tsx)$' },
       to: {
         dependencyTypes: ['npm', 'npm-no-pkg'],
         pathNot: '(^|/)node_modules/(react|react-dom)/',
@@ -77,7 +77,7 @@ module.exports = {
       name: 'desktop-renderer-cannot-import-node',
       comment: 'The renderer cannot access Node core modules.',
       severity: 'error',
-      from: { path: '(^|/)apps/desktop/src/renderer/', pathNot: '\\.(test|spec)\\.ts$' },
+      from: { path: '(^|/)apps/desktop/src/renderer/', pathNot: '\\.(test|spec)\\.(ts|tsx)$' },
       to: { dependencyTypes: ['core'] },
     },
     {
@@ -85,7 +85,7 @@ module.exports = {
       comment:
         'The renderer only depends on React, contracts, schemas, and local renderer modules.',
       severity: 'error',
-      from: { path: '(^|/)apps/desktop/src/renderer/', pathNot: '\\.(test|spec)\\.ts$' },
+      from: { path: '(^|/)apps/desktop/src/renderer/', pathNot: '\\.(test|spec)\\.(ts|tsx)$' },
       to: {
         path: '(^|/)(apps/desktop/src/(main|preload)/|packages/(domain|application|infrastructure|workflows|test-support)/src/)',
       },
@@ -94,7 +94,7 @@ module.exports = {
       name: 'desktop-preload-cannot-import-product-or-renderer-code',
       comment: 'The preload exposes contracts, never renderer or product implementation code.',
       severity: 'error',
-      from: { path: '(^|/)apps/desktop/src/preload/', pathNot: '\\.(test|spec)\\.ts$' },
+      from: { path: '(^|/)apps/desktop/src/preload/', pathNot: '\\.(test|spec)\\.(ts|tsx)$' },
       to: {
         path: '(^|/)(apps/desktop/src/(main|renderer)/|packages/(domain|application|infrastructure|workflows|test-support)/src/)',
       },
@@ -103,7 +103,7 @@ module.exports = {
       name: 'desktop-preload-cannot-import-unapproved-runtime-package',
       comment: 'The preload only permits Electron as an external runtime package.',
       severity: 'error',
-      from: { path: '(^|/)apps/desktop/src/preload/', pathNot: '\\.(test|spec)\\.ts$' },
+      from: { path: '(^|/)apps/desktop/src/preload/', pathNot: '\\.(test|spec)\\.(ts|tsx)$' },
       to: {
         dependencyTypes: ['npm', 'npm-no-pkg'],
         pathNot: '(^|/)node_modules/electron/',
@@ -114,7 +114,7 @@ module.exports = {
       comment:
         'S02 main code only imports contracts, schemas, application, and infrastructure through adapters.',
       severity: 'error',
-      from: { path: '(^|/)apps/desktop/src/main/', pathNot: '\\.(test|spec)\\.ts$' },
+      from: { path: '(^|/)apps/desktop/src/main/', pathNot: '\\.(test|spec)\\.(ts|tsx)$' },
       to: {
         path: '(^|/)(apps/desktop/src/(renderer|preload)/|packages/(domain|workflows|test-support)/src/)',
       },
@@ -123,7 +123,7 @@ module.exports = {
       name: 'desktop-utility-cannot-import-desktop-or-product-code',
       comment: 'Utility processes are isolated workers with only schemas and Node runtime access.',
       severity: 'error',
-      from: { path: '(^|/)apps/desktop/src/utility/', pathNot: '\\.(test|spec)\\.ts$' },
+      from: { path: '(^|/)apps/desktop/src/utility/', pathNot: '\\.(test|spec)\\.(ts|tsx)$' },
       to: {
         path: '(^|/)(apps/desktop/src/(main|preload|renderer)/|packages/(domain|application|contracts|infrastructure|workflows|test-support)/src/)',
       },
@@ -133,7 +133,7 @@ module.exports = {
       comment:
         'Utility processes use only Electron, Node core modules, and shared schemas in S01-C.',
       severity: 'error',
-      from: { path: '(^|/)apps/desktop/src/utility/', pathNot: '\\.(test|spec)\\.ts$' },
+      from: { path: '(^|/)apps/desktop/src/utility/', pathNot: '\\.(test|spec)\\.(ts|tsx)$' },
       to: {
         dependencyTypes: ['npm', 'npm-no-pkg'],
         pathNot: '(^|/)node_modules/electron/',
@@ -143,7 +143,7 @@ module.exports = {
       name: 'desktop-main-cannot-import-unapproved-runtime-package',
       comment: 'S01-B main code only permits Electron and Node core modules.',
       severity: 'error',
-      from: { path: '(^|/)apps/desktop/src/main/', pathNot: '\\.(test|spec)\\.ts$' },
+      from: { path: '(^|/)apps/desktop/src/main/', pathNot: '\\.(test|spec)\\.(ts|tsx)$' },
       to: {
         dependencyTypes: ['npm', 'npm-no-pkg'],
         pathNot: '(^|/)node_modules/electron/',
@@ -155,7 +155,7 @@ module.exports = {
       severity: 'error',
       from: {
         path: '(^|/)apps/desktop/src/',
-        pathNot: '\\.(test|spec)\\.ts$',
+        pathNot: '\\.(test|spec)\\.(ts|tsx)$',
       },
       to: { path: '(^|/)packages/test-support/src/' },
     },
