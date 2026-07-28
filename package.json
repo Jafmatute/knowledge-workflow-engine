@@ -1,0 +1,41 @@
+{
+  "name": "knowledge-workflow-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.12.0",
+  "engines": {
+    "node": ">=24.13.1 <25",
+    "pnpm": ">=11.12.0 <12"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @kwe/desktop dev",
+    "build": "pnpm --recursive --if-present run build",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --project tsconfig.json && pnpm --recursive --if-present run typecheck",
+    "test": "vitest run",
+    "test:integration": "pnpm build && pnpm test:integration:run",
+    "test:integration:run": "pnpm --filter @kwe/desktop exec electron ../../tests/integration/utility-process-harness.cjs",
+    "test:package": "node scripts/verify-package.mjs",
+    "test:e2e": "pnpm build && pnpm test:package && pnpm test:e2e:run",
+    "test:e2e:run": "pnpm exec playwright test",
+    "check:architecture": "dependency-cruiser --config dependency-cruiser.cjs packages apps/desktop/src",
+    "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm check:architecture && pnpm test && pnpm build && pnpm test:integration:run && pnpm test:package && pnpm test:e2e:run"
+  },
+  "devDependencies": {
+    "@electron/asar": "3.4.1",
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.58.2",
+    "@types/node": "24.10.7",
+    "dependency-cruiser": "18.1.0",
+    "eslint": "10.8.0",
+    "eslint-config-prettier": "10.1.8",
+    "globals": "17.7.0",
+    "prettier": "3.9.6",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.65.0",
+    "vitest": "4.1.10"
+  }
+}

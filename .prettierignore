@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+out/
+**/.vite/
+coverage/
+release/
+artifacts/
+playwright-report/
+test-results/
+pnpm-lock.yaml
+SECURITY.md
+docs/
+.github/ISSUE_TEMPLATE/

@@ -1,0 +1,19 @@
+import { app } from 'electron';
+
+import { createMainWindow } from './create-main-window.js';
+import { registerApplicationProtocol, registerApplicationScheme } from './register-app-protocol.js';
+import { registerIpcHandlers } from './register-ipc-handlers.js';
+
+registerApplicationScheme();
+
+void app.whenReady().then(async () => {
+  registerApplicationProtocol();
+  const mainWindow = await createMainWindow();
+  registerIpcHandlers(mainWindow);
+});
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});

@@ -40,6 +40,11 @@ artifacts/
 # JavaScript dependencies
 node_modules/
 
+# Package builds
+dist/
+.vite/
+**/.vite/
+
 # Electron
 out/
 release/
