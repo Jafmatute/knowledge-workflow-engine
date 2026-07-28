@@ -111,11 +111,12 @@ module.exports = {
     },
     {
       name: 'desktop-main-cannot-import-product-code',
-      comment: 'S01-B main code only hosts Electron, contracts, and schemas.',
+      comment:
+        'S02 main code only imports contracts, schemas, application, and infrastructure through adapters.',
       severity: 'error',
       from: { path: '(^|/)apps/desktop/src/main/', pathNot: '\\.(test|spec)\\.ts$' },
       to: {
-        path: '(^|/)(apps/desktop/src/(renderer|preload)/|packages/(domain|application|infrastructure|workflows|test-support)/src/)',
+        path: '(^|/)(apps/desktop/src/(renderer|preload)/|packages/(domain|workflows|test-support)/src/)',
       },
     },
     {

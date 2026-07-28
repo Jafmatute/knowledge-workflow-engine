@@ -1,6 +1,9 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
+    "paths": {
+      "@kwe/*": ["packages/*/src/index.ts"]
+    },
     "types": ["node"]
   },
   "include": [

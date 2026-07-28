@@ -56,7 +56,7 @@ async function waitForTrustedPage(
   );
 }
 
-test('verifies the complete S01 security surface of the packaged shell', async () => {
+test('verifies the complete S02 security and project surface of the packaged shell', async () => {
   const port = await findFreePort();
   const stderrChunks: Buffer[] = [];
   const consoleErrors: string[] = [];
@@ -130,15 +130,12 @@ test('verifies the complete S01 security surface of the packaged shell', async (
     // Trusted URL
     expect(window.url()).toBe(TRUSTED_PAGE_URL);
 
-    // Heading and version
-    await expect(window.getByRole('heading', { name: 'Secure desktop shell ready' })).toBeVisible({
+    // S02: Empty project state - heading and buttons visible
+    await expect(window.getByRole('heading', { name: 'No project open' })).toBeVisible({
       timeout: 10_000,
     });
-    await expect(window.getByText('Application version: 0.1.0')).toBeVisible();
-
-    // Utility diagnostic reaches ready
-    await window.getByRole('button', { name: 'Verify utility process' }).click();
-    await expect(window.getByText('Utility process: Ready')).toBeVisible();
+    await expect(window.getByRole('button', { name: 'Create project' })).toBeVisible();
+    await expect(window.getByRole('button', { name: 'Open project' })).toBeVisible();
 
     // Assert no failed kwe: asset requests
     if (failedKweRequests.length > 0) {
@@ -149,8 +146,8 @@ test('verifies the complete S01 security surface of the packaged shell', async (
     expect(await window.evaluate('typeof window.require')).toBe('undefined');
     expect(await window.evaluate('typeof window.process')).toBe('undefined');
 
-    // window.kwe surface is exactly app and system
-    expect(await window.evaluate('Object.keys(window.kwe)')).toEqual(['app', 'system']);
+    // S02: window.kwe surface includes projects namespace
+    expect(await window.evaluate('Object.keys(window.kwe)')).toEqual(['app', 'system', 'projects']);
 
     // app exposes only getInfo
     expect(await window.evaluate('Object.keys(window.kwe.app)')).toEqual(['getInfo']);
@@ -158,6 +155,13 @@ test('verifies the complete S01 security surface of the packaged shell', async (
     // system exposes only computeDiagnosticHash
     expect(await window.evaluate('Object.keys(window.kwe.system)')).toEqual([
       'computeDiagnosticHash',
+    ]);
+
+    // projects exposes create, open, getActive
+    expect(await window.evaluate('Object.keys(window.kwe.projects)')).toEqual([
+      'create',
+      'open',
+      'getActive',
     ]);
 
     // A popup attempt does not create another page

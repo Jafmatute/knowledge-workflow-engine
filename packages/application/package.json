@@ -5,6 +5,11 @@
   "type": "module",
   "exports": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "dependencies": {
+    "@kwe/domain": "workspace:*",
+    "@kwe/schemas": "workspace:*",
+    "zod": "4.4.3"
+  },
   "scripts": {
     "build": "tsc --project tsconfig.build.json",
     "typecheck": "tsc --project tsconfig.json"

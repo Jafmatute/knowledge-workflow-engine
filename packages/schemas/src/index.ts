@@ -1,3 +1,5 @@
+export * from './project.js';
+
 import { z } from 'zod';
 
 export const getAppInfoInputSchema = z.object({}).strict();

@@ -10,7 +10,10 @@
     "typecheck": "tsc --project tsconfig.main.json && tsc --project tsconfig.preload.json && tsc --project tsconfig.renderer.json && tsc --project tsconfig.utility.json && tsc --project tsconfig.tools.json"
   },
   "dependencies": {
+    "@kwe/application": "workspace:*",
     "@kwe/contracts": "workspace:*",
+    "@kwe/domain": "workspace:*",
+    "@kwe/infrastructure": "workspace:*",
     "@kwe/schemas": "workspace:*",
     "react": "19.2.8",
     "react-dom": "19.2.8"

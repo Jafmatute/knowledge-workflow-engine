@@ -6,9 +6,6 @@
     "moduleResolution": "NodeNext",
     "baseUrl": ".",
     "ignoreDeprecations": "6.0",
-    "paths": {
-      "@kwe/*": ["packages/*/src/index.ts"]
-    },
     "types": [],
     "strict": true,
     "noUncheckedIndexedAccess": true,

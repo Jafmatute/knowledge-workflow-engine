@@ -47,9 +47,18 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@kwe/application':
+        specifier: workspace:*
+        version: link:../../packages/application
       '@kwe/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@kwe/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+      '@kwe/infrastructure':
+        specifier: workspace:*
+        version: link:../../packages/infrastructure
       '@kwe/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas
@@ -97,7 +106,17 @@ importers:
         specifier: 8.1.5
         version: 8.1.5(@types/node@24.10.7)(jiti@2.7.0)(terser@5.49.0)
 
-  packages/application: {}
+  packages/application:
+    dependencies:
+      '@kwe/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@kwe/schemas':
+        specifier: workspace:*
+        version: link:../schemas
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
 
   packages/contracts:
     dependencies:
@@ -107,7 +126,17 @@ importers:
 
   packages/domain: {}
 
-  packages/infrastructure: {}
+  packages/infrastructure:
+    dependencies:
+      '@kwe/application':
+        specifier: workspace:*
+        version: link:../application
+      '@kwe/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@kwe/schemas':
+        specifier: workspace:*
+        version: link:../schemas
 
   packages/schemas:
     dependencies:

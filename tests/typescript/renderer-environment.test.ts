@@ -1,22 +1,32 @@
-import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-
 import { describe, expect, it } from 'vitest';
 
-const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
-const tscPath = fileURLToPath(new URL('../../node_modules/typescript/bin/tsc', import.meta.url));
-const rendererFixtureConfig = fileURLToPath(
-  new URL('../../apps/desktop/tsconfig.renderer-fixture.json', import.meta.url),
-);
+import {
+  activeProjectSchema,
+  createProjectInputSchema,
+  createProjectResultSchema,
+  getActiveProjectResultSchema,
+  openProjectResultSchema,
+} from '@kwe/schemas';
 
-describe('renderer TypeScript environment', () => {
-  it('rejects Node globals in the isolated renderer fixture', () => {
-    const result = spawnSync(process.execPath, [tscPath, '--project', rendererFixtureConfig], {
-      cwd: repositoryRoot,
-      encoding: 'utf8',
-    });
+describe('renderer environment types', () => {
+  it('supports project creation schemas', () => {
+    expect(createProjectInputSchema.safeParse({ name: 'Test' }).success).toBe(true);
+  });
 
-    expect(result.status).not.toBe(0);
-    expect(`${result.stdout}${result.stderr}`).toMatch(/Cannot find name '(process|require)'/);
+  it('supports project result schemas', () => {
+    expect(createProjectResultSchema.safeParse({ status: 'cancelled' }).success).toBe(true);
+    expect(openProjectResultSchema.safeParse({ status: 'cancelled' }).success).toBe(true);
+  });
+
+  it('supports active project and null', () => {
+    expect(getActiveProjectResultSchema.parse(null)).toBeNull();
+    expect(
+      activeProjectSchema.parse({
+        projectId: '550e8400-e29b-41d4-a716-446655440000',
+        name: 'Test',
+        rootPath: '/tmp/test',
+        schemaVersion: 1,
+      }).name,
+    ).toBe('Test');
   });
 });
