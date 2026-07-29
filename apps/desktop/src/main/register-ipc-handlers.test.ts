@@ -1,13 +1,20 @@
-import { describe, expect, it, vi } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 import { IPC_CHANNELS } from '@kwe/contracts';
 import type { DirectoryDialog, ProjectWorkspaceRepository } from '@kwe/application';
 
+const mockIpcHandle = vi.hoisted(() => vi.fn());
+const mockShowOpenDialog = vi.hoisted(() => vi.fn());
+
 vi.mock('electron', () => ({
-  dialog: { showOpenDialog: vi.fn() },
+  dialog: { showOpenDialog: mockShowOpenDialog },
   app: {},
   BrowserWindow: vi.fn(),
-  ipcMain: { handle: vi.fn() },
+  ipcMain: { handle: mockIpcHandle },
 }));
 
 describe('IPC channel enumeration', () => {
@@ -173,5 +180,140 @@ describe('createProjectHandlers', () => {
     expect(result.status).toBe('created');
 
     expect(getActiveProject()?.projectId).toBe('550e8400-e29b-41d4-a716-446655440000');
+  });
+});
+
+describe('IPC registration boundary', () => {
+  function createMainWindow(): import('electron').BrowserWindow {
+    const mainFrame = { url: 'kwe://renderer/index.html' };
+    return { webContents: { id: 1, mainFrame } } as unknown as import('electron').BrowserWindow;
+  }
+
+  function trustedEvent(
+    mainWindow: import('electron').BrowserWindow,
+  ): import('electron').IpcMainInvokeEvent {
+    return {
+      senderFrame: (mainWindow.webContents as unknown as Record<string, unknown>).mainFrame,
+      sender: mainWindow.webContents,
+    } as unknown as import('electron').IpcMainInvokeEvent;
+  }
+
+  function untrustedEvent(): import('electron').IpcMainInvokeEvent {
+    return {
+      senderFrame: { isMainFrame: true, url: 'https://evil.com' },
+      sender: { id: 999 },
+    } as unknown as import('electron').IpcMainInvokeEvent;
+  }
+
+  beforeEach(() => {
+    vi.resetModules();
+    (globalThis as Record<string, unknown>).MAIN_WINDOW_VITE_DEV_SERVER_URL = undefined;
+    (mockIpcHandle as Mock).mockClear();
+    (mockShowOpenDialog as Mock).mockClear();
+  });
+
+  function getHandler(
+    channel: string,
+  ): ((event: unknown, ...args: unknown[]) => unknown) | undefined {
+    const call: unknown[] | undefined = (mockIpcHandle as Mock).mock.calls.find(
+      (args: unknown[]) => args[0] === channel,
+    );
+    if (call === undefined) return undefined;
+    return call[1] as (event: unknown, ...args: unknown[]) => unknown;
+  }
+
+  it('registers each project channel exactly once', async () => {
+    const { registerIpcHandlers } = await import('./register-ipc-handlers.js');
+
+    registerIpcHandlers(createMainWindow());
+
+    const channels = (mockIpcHandle as Mock).mock.calls.map((args: unknown[]) => args[0] as string);
+    expect(channels.filter((ch: string) => ch === 'project:create')).toHaveLength(1);
+    expect(channels.filter((ch: string) => ch === 'project:open')).toHaveLength(1);
+    expect(channels.filter((ch: string) => ch === 'project:get-active')).toHaveLength(1);
+  });
+
+  it('project:create rejects untrusted sender', async () => {
+    const { registerIpcHandlers } = await import('./register-ipc-handlers.js');
+
+    registerIpcHandlers(createMainWindow());
+
+    const handler = getHandler('project:create')!;
+    await expect(
+      Promise.resolve().then(() => handler(untrustedEvent(), { name: 'x' })),
+    ).rejects.toThrow('Unauthorized application request.');
+  });
+
+  it('project:open rejects untrusted sender', async () => {
+    const { registerIpcHandlers } = await import('./register-ipc-handlers.js');
+
+    registerIpcHandlers(createMainWindow());
+
+    const handler = getHandler('project:open')!;
+    await expect(Promise.resolve().then(() => handler(untrustedEvent()))).rejects.toThrow(
+      'Unauthorized application request.',
+    );
+  });
+
+  it('project:get-active rejects untrusted sender', async () => {
+    const { registerIpcHandlers } = await import('./register-ipc-handlers.js');
+
+    registerIpcHandlers(createMainWindow());
+
+    const handler = getHandler('project:get-active')!;
+    await expect(Promise.resolve().then(() => handler(untrustedEvent()))).rejects.toThrow(
+      'Unauthorized application request.',
+    );
+  });
+
+  it('project:create validates input through IPC boundary', async () => {
+    const { registerIpcHandlers } = await import('./register-ipc-handlers.js');
+
+    const mainWindow = createMainWindow();
+    registerIpcHandlers(mainWindow);
+
+    const handler = getHandler('project:create')!;
+    const result = (await handler(trustedEvent(mainWindow), { name: '' })) as Record<
+      string,
+      unknown
+    >;
+
+    expect(result).toEqual({ status: 'failed', error: { code: 'PROJECT_NAME_INVALID' } });
+  });
+
+  it('project:create succeeds through full IPC boundary', async () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'kwe-ipc-'));
+    (mockShowOpenDialog as Mock).mockResolvedValue({ canceled: false, filePaths: [tmpDir] });
+
+    const { registerIpcHandlers } = await import('./register-ipc-handlers.js');
+
+    const mainWindow = createMainWindow();
+    registerIpcHandlers(mainWindow);
+
+    const handler = getHandler('project:create')!;
+    const result = (await handler(trustedEvent(mainWindow), { name: 'IPC Test' })) as {
+      status: string;
+      project?: { name: string };
+    };
+
+    try {
+      expect(result.status).toBe('created');
+      if (result.status === 'created') {
+        expect(result.project!.name).toBe('IPC Test');
+      }
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('project:get-active returns null before any project is active', async () => {
+    const { registerIpcHandlers } = await import('./register-ipc-handlers.js');
+
+    const mainWindow = createMainWindow();
+    registerIpcHandlers(mainWindow);
+
+    const handler = getHandler('project:get-active')!;
+    const result = await handler(trustedEvent(mainWindow));
+    expect(result).toBeNull();
   });
 });

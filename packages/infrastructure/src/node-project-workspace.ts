@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { writeFileSync } from 'node:fs';
+import { openSync, writeSync, fsyncSync, closeSync } from 'node:fs';
 import { link, lstat, mkdir, readFile, realpath, stat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -130,14 +130,27 @@ export function createNodeProjectWorkspaceRepository(): ProjectWorkspaceReposito
       }
 
       const tmpPath = join(kweDir, `.tmp.${randomUUID()}`);
+      const contentBytes = JSON.stringify(validatedManifest, null, 2) + '\n';
 
+      let fd: number | undefined;
       try {
-        writeFileSync(tmpPath, JSON.stringify(validatedManifest, null, 2) + '\n', {
-          encoding: 'utf-8',
-          flag: 'wx',
-        });
+        fd = openSync(tmpPath, 'wx');
+        const buf = Buffer.from(contentBytes, 'utf-8');
+        writeSync(fd, buf);
+        fsyncSync(fd);
+        closeSync(fd);
       } catch (error: unknown) {
-        await removeTmp(tmpPath).catch(() => {});
+        if (fd !== undefined)
+          try {
+            closeSync(fd);
+          } catch {
+            /* ignore close error after failed write */
+          }
+        try {
+          await removeTmp(tmpPath);
+        } catch {
+          /* preserve original error */
+        }
         const nodeErr = error as NodeJS.ErrnoException;
         if (nodeErr?.code === 'EEXIST') {
           throw new ProjectWorkspaceError('PROJECT_IO_FAILED', 'Temporary file already exists');
@@ -148,7 +161,11 @@ export function createNodeProjectWorkspaceRepository(): ProjectWorkspaceReposito
       try {
         await link(tmpPath, manifestPath);
       } catch (error: unknown) {
-        await removeTmp(tmpPath).catch(() => {});
+        try {
+          await removeTmp(tmpPath);
+        } catch {
+          /* preserve original error */
+        }
         const nodeErr = error as NodeJS.ErrnoException;
         if (nodeErr?.code === 'EEXIST') {
           throw new ProjectWorkspaceError(

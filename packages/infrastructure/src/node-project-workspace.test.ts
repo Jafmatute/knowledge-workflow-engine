@@ -1,4 +1,13 @@
-import { chmod, mkdir, mkdtemp, readdir, readFile, realpath, writeFile } from 'node:fs/promises';
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  realpath,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -6,10 +15,27 @@ import { existsSync } from 'node:fs';
 
 import { platform } from 'node:os';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { createNodeProjectWorkspaceRepository } from './node-project-workspace.js';
 import { ProjectWorkspaceError } from '@kwe/application';
+
+let symlinkSupported = false;
+
+beforeAll(async () => {
+  const tmpDir = join(tmpdir(), 'kwe-sl-check-' + Date.now());
+  try {
+    await mkdir(tmpDir, { recursive: true });
+    const src = join(tmpDir, 'src');
+    await mkdir(src);
+    await symlink(src, join(tmpDir, 'dst'), 'dir');
+    symlinkSupported = true;
+  } catch {
+    symlinkSupported = false;
+  } finally {
+    rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
 
 describe('Node project workspace repository', () => {
   let tmpBase: string;
@@ -168,55 +194,37 @@ describe('Node project workspace repository', () => {
     expect(tmpFiles).toHaveLength(0);
   });
 
-  it('accepts root symlink (canonicalizes it)', async () => {
+  it.skipIf(!symlinkSupported)('accepts root symlink (canonicalizes it)', async () => {
     const realDir = join(tmpBase, 'realdir');
     const linkDir = join(tmpBase, 'linkdir');
     await mkdir(realDir);
 
-    let symlinkFn: typeof import('node:fs/promises').symlink;
-    try {
-      symlinkFn = (await import('node:fs/promises')).symlink;
-      await symlinkFn(realDir, linkDir, 'dir');
-    } catch {
-      return;
-    }
+    await symlink(realDir, linkDir, 'dir');
 
     const project = await repo.create('Test', linkDir);
     const canonical = await realpath(realDir);
     expect(project.rootPath).toBe(canonical);
   });
 
-  it('rejects .kwe symlink (PROJECT_PATH_INVALID)', async () => {
+  it.skipIf(!symlinkSupported)('rejects .kwe symlink (PROJECT_PATH_INVALID)', async () => {
     const realKwe = join(tmpBase, 'real-kwe');
     const kweDir = join(tmpBase, '.kwe');
     await mkdir(realKwe);
 
-    let symlinkFn: typeof import('node:fs/promises').symlink;
-    try {
-      symlinkFn = (await import('node:fs/promises')).symlink;
-      await symlinkFn(realKwe, kweDir, 'dir');
-    } catch {
-      return;
-    }
+    await symlink(realKwe, kweDir, 'dir');
 
     const err = await repo.create('Test', tmpBase).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ProjectWorkspaceError);
     expect((err as ProjectWorkspaceError).code).toBe('PROJECT_PATH_INVALID');
   });
 
-  it('rejects project.json symlink (PROJECT_PATH_INVALID)', async () => {
+  it.skipIf(!symlinkSupported)('rejects project.json symlink (PROJECT_PATH_INVALID)', async () => {
     const kweDir = join(tmpBase, '.kwe');
     const manifestPath = join(kweDir, 'project.json');
     await mkdir(kweDir);
     await writeFile(join(tmpBase, 'real-manifest.json'), '{}', 'utf-8');
 
-    let symlinkFn: typeof import('node:fs/promises').symlink;
-    try {
-      symlinkFn = (await import('node:fs/promises')).symlink;
-      await symlinkFn(join(tmpBase, 'real-manifest.json'), manifestPath, 'file');
-    } catch {
-      return;
-    }
+    await symlink(join(tmpBase, 'real-manifest.json'), manifestPath, 'file');
 
     const err = await repo.create('Test', tmpBase).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ProjectWorkspaceError);
