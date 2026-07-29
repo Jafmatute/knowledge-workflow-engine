@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { openSync, writeSync, fsyncSync, closeSync } from 'node:fs';
-import { link, lstat, mkdir, readFile, realpath, stat, unlink } from 'node:fs/promises';
+import { linkSync, openSync, unlinkSync, writeSync, fsyncSync, closeSync } from 'node:fs';
+import { lstat, mkdir, readFile, realpath, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import type { ProjectWorkspaceRepository } from '@kwe/application';
@@ -13,6 +13,41 @@ import {
   MANIFEST_FILE,
   projectManifestSchema,
 } from '@kwe/schemas';
+
+export interface AtomicFileSystem {
+  openWriteExclusive(path: string): number;
+  writeAll(fd: number, buffer: Buffer): void;
+  sync(fd: number): void;
+  close(fd: number): void;
+  link(src: string, dest: string): void;
+  unlink(path: string): void;
+}
+
+export const defaultAtomicFs: AtomicFileSystem = {
+  openWriteExclusive(path: string): number {
+    return openSync(path, 'wx');
+  },
+  writeAll(fd: number, buffer: Buffer): void {
+    let offset = 0;
+    while (offset < buffer.length) {
+      const written = writeSync(fd, buffer, offset, buffer.length - offset, null);
+      if (written <= 0) throw new Error('Zero-byte write');
+      offset += written;
+    }
+  },
+  sync(fd: number): void {
+    fsyncSync(fd);
+  },
+  close(fd: number): void {
+    closeSync(fd);
+  },
+  link(src: string, dest: string): void {
+    linkSync(src, dest);
+  },
+  unlink(path: string): void {
+    unlinkSync(path);
+  },
+};
 
 function getKweDir(rootPath: string): string {
   return join(rootPath, WORKSPACE_DIR);
@@ -74,17 +109,11 @@ function isContained(parent: string, child: string): boolean {
   return true;
 }
 
-async function removeTmp(tmpPath: string): Promise<void> {
-  try {
-    await unlink(tmpPath);
-  } catch (error: unknown) {
-    if (!isEnoent(error)) {
-      throw new ProjectWorkspaceError('PROJECT_IO_FAILED', 'Failed to clean up temporary file');
-    }
-  }
-}
+export function createNodeProjectWorkspaceRepository(
+  atomicFs?: AtomicFileSystem,
+): ProjectWorkspaceRepository {
+  const fs: AtomicFileSystem = atomicFs ?? defaultAtomicFs;
 
-export function createNodeProjectWorkspaceRepository(): ProjectWorkspaceRepository {
   return {
     async create(name: string, rootPath: string): Promise<ActiveProjectDto> {
       const canonicalRoot = await canonicalDir(rootPath);
@@ -131,52 +160,46 @@ export function createNodeProjectWorkspaceRepository(): ProjectWorkspaceReposito
 
       const tmpPath = join(kweDir, `.tmp.${randomUUID()}`);
       const contentBytes = JSON.stringify(validatedManifest, null, 2) + '\n';
+      const buf = Buffer.from(contentBytes, 'utf-8');
 
-      let fd: number | undefined;
+      let fd: number;
+
       try {
-        fd = openSync(tmpPath, 'wx');
-        const buf = Buffer.from(contentBytes, 'utf-8');
-        writeSync(fd, buf);
-        fsyncSync(fd);
-        closeSync(fd);
+        fd = fs.openWriteExclusive(tmpPath);
       } catch (error: unknown) {
-        if (fd !== undefined)
-          try {
-            closeSync(fd);
-          } catch {
-            /* ignore close error after failed write */
-          }
-        try {
-          await removeTmp(tmpPath);
-        } catch {
-          /* preserve original error */
-        }
         const nodeErr = error as NodeJS.ErrnoException;
         if (nodeErr?.code === 'EEXIST') {
           throw new ProjectWorkspaceError('PROJECT_IO_FAILED', 'Temporary file already exists');
         }
+        throw new ProjectWorkspaceError('PROJECT_IO_FAILED', 'Failed to create temporary file');
+      }
+
+      try {
+        fs.writeAll(fd, buf);
+        fs.sync(fd);
+        fs.close(fd);
+      } catch {
+        try { fs.close(fd); } catch { /* close failure after write/sync failure */ }
+        try { fs.unlink(tmpPath); } catch (_e) { if (!isEnoent(_e)) { /* suppress */ } }
         throw new ProjectWorkspaceError('PROJECT_IO_FAILED', 'Failed to write temporary file');
       }
 
       try {
-        await link(tmpPath, manifestPath);
+        fs.link(tmpPath, manifestPath);
       } catch (error: unknown) {
-        try {
-          await removeTmp(tmpPath);
-        } catch {
-          /* preserve original error */
-        }
+        try { fs.unlink(tmpPath); } catch (_e) { if (!isEnoent(_e)) { /* suppress */ } }
         const nodeErr = error as NodeJS.ErrnoException;
         if (nodeErr?.code === 'EEXIST') {
-          throw new ProjectWorkspaceError(
-            'PROJECT_ALREADY_EXISTS',
-            'A project already exists at this location',
-          );
+          throw new ProjectWorkspaceError('PROJECT_ALREADY_EXISTS', 'A project already exists at this location');
         }
         throw new ProjectWorkspaceError('PROJECT_IO_FAILED', 'Failed to publish project manifest');
       }
 
-      await removeTmp(tmpPath);
+      try {
+        fs.unlink(tmpPath);
+      } catch {
+        throw new ProjectWorkspaceError('PROJECT_IO_FAILED', 'Failed to clean up temporary file');
+      }
 
       let content: string;
       try {
